@@ -12,6 +12,10 @@
 #include "llvm/Support/raw_ostream.h"
 #include "llvm/Transforms/IPO/PassManagerBuilder.h"
 #include "llvm/Transforms/Utils/BasicBlockUtils.h"
+#include "llvm/Analysis/LoopInfo.h"
+#include "llvm/Analysis/LoopPass.h"
+#include "llvm/Analysis/IVUsers.h"
+#include "llvm/Pass.h"
 #include <fstream>
 #include <stdio.h>
 #include <stdlib.h>
@@ -60,7 +64,7 @@ u32 hashName(std::string str) {
 class ChunkFuzzerPass : public ModulePass {
 public:
   static char ID;
-  bool FastMode = true;
+  bool FastMode = false;
   std::string ModName;
   u32 ModId;
   u32 CidCounter;
@@ -151,7 +155,7 @@ char ChunkFuzzerPass::ID = 0;
 
 u32 ChunkFuzzerPass::getRandomBasicBlockId() { return random() % MAP_SIZE; }
 
-bool ChunkFuzzerPass::skipBasicBlock() { return (random() % 100) >= inst_ratio; }
+// bool ChunkFuzzerPass::skipBasicBlock() { return (random() % 100) >= inst_ratio; }
 
 u32 ChunkFuzzerPass::getRandomNum()
 {
@@ -161,17 +165,23 @@ u32 ChunkFuzzerPass::getRandomNum()
 
 void ChunkFuzzerPass::setRandomNumSeed(u32 seed) { RandSeed = seed; }
 
-u32 ChunkFuzzerPass::getRandomContextId() {
-  u32 context = getRandomNum() % MAP_SIZE;
-  if (output_cond_loc) {
-    errs() << "[CONTEXT] " << context << "\n";
-  }
-  return context;
-}
+// u32 ChunkFuzzerPass::getRandomContextId() {
+//   u32 context = getRandomNum() % MAP_SIZE;
+//   if (output_cond_loc) {
+//     errs() << "[CONTEXT] " << context << "\n";
+//   }
+//   return context;
+// }
 
 u32 ChunkFuzzerPass::getRandomInstructionId() { return getRandomNum(); }
 
 u32 ChunkFuzzerPass::getInstructionId(Instruction *Inst) {}
+
+u32 ChunkFuzzerPass::getRandomLoopId() { return getRandomNum(); }
+
+u32 ChunkFuzzerPass::getLoopId(Loop *L) {}
+
+u32 ChunkFuzzerPass::getLoopIterationId(Loop *L, ) {}
 
 void ChunkFuzzerPass::setValueNonSan(Value *v) {
   if (Instruction *ins = dyn_cast<Instruction>(v))
@@ -232,44 +242,11 @@ void ChunkFuzzerPass::initVariables(Module &M) {
       ConstantInt::get(Int32Ty, 0), "__chunk_fuzzer_call_site", 0, 
       GlobalVariable::GeneralDynamicTLSModel, 0, false);
 
-  if (FastMode) {
-    ChunkFuzzerMapPtr = new GlobalVariable(M, PointerType::get(Int8Ty, 0), false,
-                                      GlobalValue::ExternalLinkage, 0,
-                                      "__chunk_fuzzer_area_ptr");
-
-    // ChunkFuzzerCondId =
-    //     new GlobalVariable(M, Int32Ty, false, GlobalValue::ExternalLinkage, 0,
-    //                        "__chunk_fuzzer_cond_cmpid");
-
-    ChunkFuzzerPrevLoc =
-        new GlobalVariable(M, Int32Ty, false, GlobalValue::CommonLinkage,
-                           ConstantInt::get(Int32Ty, 0), "__chunk_fuzzer_prev_loc", 0,
-                           GlobalVariable::GeneralDynamicTLSModel, 0, false);
-
-    // Type *TraceCmpArgs[5] = {Int32Ty, Int32Ty, Int32Ty, Int64Ty, Int64Ty};
-    // TraceCmpTy = FunctionType::get(Int32Ty, TraceCmpArgs, false);
-    // TraceCmp = M.getOrInsertFunction("__chunk_fuzzer_trace_cmp", TraceCmpTy);
-    // if (Function *F = dyn_cast<Function>(TraceCmp)) {
-    //   F->addAttribute(LLVM_ATTRIBUTE_LIST::FunctionIndex, Attribute::NoUnwind);
-    //   F->addAttribute(LLVM_ATTRIBUTE_LIST::FunctionIndex, Attribute::ReadNone);
-    //   // F->addAttribute(1, Attribute::ZExt);
-    // }
-
-    // Type *TraceSwArgs[3] = {Int32Ty, Int32Ty, Int64Ty};
-    // TraceSwTy = FunctionType::get(Int64Ty, TraceSwArgs, false);
-    // TraceSw = M.getOrInsertFunction("__chunk_fuzzer_trace_switch", TraceSwTy);
-    // if (Function *F = dyn_cast<Function>(TraceSw)) {
-    //   F->addAttribute(LLVM_ATTRIBUTE_LIST::FunctionIndex, Attribute::NoUnwind);
-    //   F->addAttribute(LLVM_ATTRIBUTE_LIST::FunctionIndex, Attribute::ReadNone);
-    //   // F->addAttribute(LLVM_ATTRIBUTE_LIST::ReturnIndex, Attribute::ZExt);
-    //   // F->addAttribute(1, Attribute::ZExt);
-    // }
-
-  } else if (TrackMode) {
+  if (TrackMode) {
     Type *TraceCmpTtArgs[7] = {Int32Ty, Int32Ty, Int32Ty, Int32Ty,
                                Int64Ty, Int64Ty, Int32Ty};
     TraceCmpTtTy = FunctionType::get(VoidTy, TraceCmpTtArgs, false);
-    TraceCmpTT = M.getOrInsertFunction("__angora_trace_cmp_tt", TraceCmpTtTy);
+    TraceCmpTT = M.getOrInsertFunction("__chunk_fuzzer_trace_cmp_tt", TraceCmpTtTy);
     if (Function *F = dyn_cast<Function>(TraceCmpTT)) {
       F->addAttribute(LLVM_ATTRIBUTE_LIST::FunctionIndex, Attribute::NoUnwind);
       F->addAttribute(LLVM_ATTRIBUTE_LIST::FunctionIndex, Attribute::ReadNone);
@@ -278,7 +255,7 @@ void ChunkFuzzerPass::initVariables(Module &M) {
     Type *TraceSwTtArgs[6] = {Int32Ty, Int32Ty, Int32Ty,
                               Int64Ty, Int32Ty, Int64PtrTy};
     TraceSwTtTy = FunctionType::get(VoidTy, TraceSwTtArgs, false);
-    TraceSwTT = M.getOrInsertFunction("__angora_trace_switch_tt", TraceSwTtTy);
+    TraceSwTT = M.getOrInsertFunction("__chunk_fuzzer_trace_switch_tt", TraceSwTtTy);
     if (Function *F = dyn_cast<Function>(TraceSwTT)) {
       F->addAttribute(LLVM_ATTRIBUTE_LIST::FunctionIndex, Attribute::NoUnwind);
       F->addAttribute(LLVM_ATTRIBUTE_LIST::FunctionIndex, Attribute::ReadNone);
@@ -286,7 +263,7 @@ void ChunkFuzzerPass::initVariables(Module &M) {
 
     Type *TraceFnTtArgs[5] = {Int32Ty, Int32Ty, Int32Ty, Int8PtrTy, Int8PtrTy};
     TraceFnTtTy = FunctionType::get(VoidTy, TraceFnTtArgs, false);
-    TraceFnTT = M.getOrInsertFunction("__angora_trace_fn_tt", TraceFnTtTy);
+    TraceFnTT = M.getOrInsertFunction("__chunk_fuzzer_trace_fn_tt", TraceFnTtTy);
     if (Function *F = dyn_cast<Function>(TraceFnTT)) {
       F->addAttribute(LLVM_ATTRIBUTE_LIST::FunctionIndex, Attribute::NoUnwind);
       F->addAttribute(LLVM_ATTRIBUTE_LIST::FunctionIndex, Attribute::ReadOnly);
@@ -294,7 +271,7 @@ void ChunkFuzzerPass::initVariables(Module &M) {
 
     Type *TraceExploitTtArgs[5] = {Int32Ty, Int32Ty, Int32Ty, Int32Ty, Int64Ty};
     TraceExploitTtTy = FunctionType::get(VoidTy, TraceExploitTtArgs, false);
-    TraceExploitTT = M.getOrInsertFunction("__angora_trace_exploit_val_tt",
+    TraceExploitTT = M.getOrInsertFunction("__chunk_fuzzer_trace_exploit_val_tt",
                                            TraceExploitTtTy);
     if (Function *F = dyn_cast<Function>(TraceExploitTT)) {
       F->addAttribute(LLVM_ATTRIBUTE_LIST::FunctionIndex, Attribute::NoUnwind);
@@ -344,6 +321,12 @@ void ChunkFuzzerPass::initVariables(Module &M) {
   }
 }
 
+void handleLoop(Loop *L) {
+  if (/* skipLoop(L) ||  */ L->getParentLoop())
+      return false;
+
+}
+
 bool ChunkFuzzerPass::runOnModule(Module &M)
 {
   SAYF(cCYA "chunk-fuzzer-pass\n");
@@ -366,7 +349,9 @@ bool ChunkFuzzerPass::runOnModule(Module &M)
     if (F.isDeclaration() || F.getName().startswith(StringRef("asan.module")))
       continue;
 
-    addFnWrap(F);
+    LoopInfo &LI = getAnalysis<LoopInfo>(*F);
+    for (LoopInfo::iterator LIT = LI.begin(), LEND = LI.end(); LIT != LEND; ++LIT) {
+      handleLoop(*LIT);
 
     std::vector<BasicBlock *> bb_list;
     for (auto bb = F.begin(); bb != F.end(); bb++)
@@ -388,10 +373,10 @@ bool ChunkFuzzerPass::runOnModule(Module &M)
         Instruction *Inst = *inst;
         if (Inst->getMetadata(NoSanMetaId))
           continue;
-        if (Inst == &(*BB->getFirstInsertionPt()))
-        {
-          countEdge(M, *BB);
-        }
+        // if (Inst == &(*BB->getFirstInsertionPt()))
+        // {
+        //   countEdge(M, *BB);
+        // }
         // if (isa<CallInst>(Inst)) {
         //   visitCallInst(Inst);
         // } else if (isa<InvokeInst>(Inst)) {
