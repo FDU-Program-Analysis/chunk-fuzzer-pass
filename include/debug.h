@@ -19,8 +19,7 @@
 
 #include <errno.h>
 
-#include "types.h"
-#include "config.h"
+#include "defs.h"
 
 /*******************
  * Terminal colors *
