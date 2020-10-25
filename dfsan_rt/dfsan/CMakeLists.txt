@@ -24,21 +24,23 @@ add_compiler_rt_component(dfsan)
 foreach(arch ${DFSAN_SUPPORTED_ARCH})
   set(DFSAN_CFLAGS ${DFSAN_COMMON_CFLAGS})
   append_list_if(COMPILER_RT_HAS_FPIE_FLAG -fPIE DFSAN_CFLAGS)
-  add_compiler_rt_runtime(clang_rt.dfsan
+  add_compiler_rt_runtime(dfsan_rt
     STATIC
     ARCHS ${arch}
     SOURCES ${DFSAN_RTL_SOURCES}
             $<TARGET_OBJECTS:RTInterception.${arch}>
             $<TARGET_OBJECTS:RTSanitizerCommon.${arch}>
             $<TARGET_OBJECTS:RTSanitizerCommonLibc.${arch}>
-    ADDITIONAL_HEADERS ${DFSAN_RTL_HEADERS}
+    # ADDITIONAL_HEADERS ${DFSAN_RTL_HEADERS}
     CFLAGS ${DFSAN_CFLAGS}
     PARENT_TARGET dfsan)
-  add_sanitizer_rt_symbols(clang_rt.dfsan
+  add_sanitizer_rt_symbols(dfsan_rt
     ARCHS ${arch}
     EXTRA dfsan.syms.extra)
   add_dependencies(dfsan
-    clang_rt.dfsan-${arch}-symbols)
+    dfsan_rt-${arch}-symbols)
+  install(FILES ${COMPILER_RT_OUTPUT_DIR}/libdfsan_rt-${arch}.a.syms
+    DESTINATION ${COMPILER_RT_LIBRARY_INSTALL_DIR})
 endforeach()
 
 set(dfsan_abilist_dir ${COMPILER_RT_OUTPUT_DIR}/share)
@@ -56,4 +58,4 @@ add_custom_command(OUTPUT ${dfsan_abilist_filename}
                    DEPENDS done_abilist.txt libc_ubuntu1404_abilist.txt)
 add_dependencies(dfsan dfsan_abilist)
 install(FILES ${dfsan_abilist_filename}
-        DESTINATION ${COMPILER_RT_INSTALL_PATH}/share)
+        DESTINATION ${ANGORA_RULE_DIR})

@@ -1,10 +1,9 @@
 #!/usr/bin/env python
 #===- lib/sanitizer_common/scripts/gen_dynamic_list.py ---------------------===#
 #
-#                     The LLVM Compiler Infrastructure
-#
-# This file is distributed under the University of Illinois Open Source
-# License. See LICENSE.TXT for details.
+# Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+# See https://llvm.org/LICENSE.txt for license information.
+# SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 #
 #===------------------------------------------------------------------------===#
 #
@@ -14,6 +13,7 @@
 #   gen_dynamic_list.py libclang_rt.*san*.a [ files ... ]
 #
 #===------------------------------------------------------------------------===#
+from __future__ import print_function
 import argparse
 import os
 import re
@@ -26,12 +26,32 @@ new_delete = set([
                   '_Znwm', '_ZnwmRKSt9nothrow_t',    # operator new(unsigned long)
                   '_Znaj', '_ZnajRKSt9nothrow_t',    # operator new[](unsigned int)
                   '_Znwj', '_ZnwjRKSt9nothrow_t',    # operator new(unsigned int)
+                  # operator new(unsigned long, std::align_val_t)
+                  '_ZnwmSt11align_val_t', '_ZnwmSt11align_val_tRKSt9nothrow_t',
+                  # operator new(unsigned int, std::align_val_t)
+                  '_ZnwjSt11align_val_t', '_ZnwjSt11align_val_tRKSt9nothrow_t',
+                  # operator new[](unsigned long, std::align_val_t)
+                  '_ZnamSt11align_val_t', '_ZnamSt11align_val_tRKSt9nothrow_t',
+                  # operator new[](unsigned int, std::align_val_t)
+                  '_ZnajSt11align_val_t', '_ZnajSt11align_val_tRKSt9nothrow_t',
                   '_ZdaPv', '_ZdaPvRKSt9nothrow_t',  # operator delete[](void *)
                   '_ZdlPv', '_ZdlPvRKSt9nothrow_t',  # operator delete(void *)
                   '_ZdaPvm',                         # operator delete[](void*, unsigned long)
                   '_ZdlPvm',                         # operator delete(void*, unsigned long)
                   '_ZdaPvj',                         # operator delete[](void*, unsigned int)
                   '_ZdlPvj',                         # operator delete(void*, unsigned int)
+                  # operator delete(void*, std::align_val_t)
+                  '_ZdlPvSt11align_val_t', '_ZdlPvSt11align_val_tRKSt9nothrow_t',
+                  # operator delete[](void*, std::align_val_t)
+                  '_ZdaPvSt11align_val_t', '_ZdaPvSt11align_val_tRKSt9nothrow_t',
+                  # operator delete(void*, unsigned long,  std::align_val_t)
+                  '_ZdlPvmSt11align_val_t',
+                  # operator delete[](void*, unsigned long, std::align_val_t)
+                  '_ZdaPvmSt11align_val_t',
+                  # operator delete(void*, unsigned int,  std::align_val_t)
+                  '_ZdlPvjSt11align_val_t',
+                  # operator delete[](void*, unsigned int, std::align_val_t)
+                  '_ZdaPvjSt11align_val_t',
                   ])
 
 versioned_functions = set(['memcpy', 'pthread_attr_getaffinity_np',
@@ -41,9 +61,9 @@ versioned_functions = set(['memcpy', 'pthread_attr_getaffinity_np',
                            'pthread_cond_wait', 'realpath',
                            'sched_getaffinity'])
 
-def get_global_functions(library):
+def get_global_functions(nm_executable, library):
   functions = []
-  nm = os.environ.get('NM', 'nm')
+  nm = os.environ.get('NM', nm_executable)
   nm_proc = subprocess.Popen([nm, library], stdout=subprocess.PIPE,
                              stderr=subprocess.PIPE)
   nm_out = nm_proc.communicate()[0].decode().split('\n')
@@ -64,13 +84,15 @@ def main(argv):
   parser.add_argument('--version-list', action='store_true')
   parser.add_argument('--extra', default=[], action='append')
   parser.add_argument('libraries', default=[], nargs='+')
+  parser.add_argument('--nm-executable', required=True)
+  parser.add_argument('-o', '--output', required=True)
   args = parser.parse_args()
 
   result = []
 
   all_functions = []
   for library in args.libraries:
-    all_functions.extend(get_global_functions(library))
+    all_functions.extend(get_global_functions(args.nm_executable, library))
   function_set = set(all_functions)
   for func in all_functions:
     # Export new/delete operators.
@@ -97,16 +119,17 @@ def main(argv):
     for line in f:
       result.append(line.rstrip())
   # Print the resulting list in the format recognized by ld.
-  print('{')
-  if args.version_list:
-    print('global:')
-  result.sort()
-  for f in result:
-    print(u'  %s;' % f)
-  if args.version_list:
-    print('local:')
-    print('  *;')
-  print('};')
+  with open(args.output, 'w') as f:
+    print('{', file=f)
+    if args.version_list:
+      print('global:', file=f)
+    result.sort()
+    for sym in result:
+      print(u'  %s;' % sym, file=f)
+    if args.version_list:
+      print('local:', file=f)
+      print('  *;', file=f)
+    print('};', file=f)
 
 if __name__ == '__main__':
   main(sys.argv)

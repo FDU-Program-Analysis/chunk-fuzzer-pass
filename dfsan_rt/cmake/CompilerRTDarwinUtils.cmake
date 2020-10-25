@@ -1,8 +1,4 @@
 include(CMakeParseArguments)
-include(CompilerRTUtils)
-include(BuiltinTests)
-
-set(CMAKE_LIPO "lipo" CACHE PATH "path to the lipo tool")
 
 # On OS X SDKs can be installed anywhere on the base system and xcode-select can
 # set the default Xcode to use. This function finds the SDKs that are present in
@@ -18,7 +14,7 @@ function(find_darwin_sdk_dir var sdk_name)
   if(NOT DARWIN_PREFER_PUBLIC_SDK)
     # Let's first try the internal SDK, otherwise use the public SDK.
     execute_process(
-      COMMAND xcrun --sdk ${sdk_name}.internal --show-sdk-path
+      COMMAND xcodebuild -version -sdk ${sdk_name}.internal Path
       RESULT_VARIABLE result_process
       OUTPUT_VARIABLE var_internal
       OUTPUT_STRIP_TRAILING_WHITESPACE
@@ -27,7 +23,7 @@ function(find_darwin_sdk_dir var sdk_name)
   endif()
   if((NOT result_process EQUAL 0) OR "" STREQUAL "${var_internal}")
     execute_process(
-      COMMAND xcrun --sdk ${sdk_name} --show-sdk-path
+      COMMAND xcodebuild -version -sdk ${sdk_name} Path
       RESULT_VARIABLE result_process
       OUTPUT_VARIABLE var_internal
       OUTPUT_STRIP_TRAILING_WHITESPACE
@@ -39,43 +35,7 @@ function(find_darwin_sdk_dir var sdk_name)
   if(result_process EQUAL 0)
     set(${var} ${var_internal} PARENT_SCOPE)
   endif()
-  message(STATUS "Checking DARWIN_${sdk_name}_SYSROOT - '${var_internal}'")
   set(DARWIN_${sdk_name}_CACHED_SYSROOT ${var_internal} CACHE STRING "Darwin SDK path for SDK ${sdk_name}." FORCE)
-endfunction()
-
-function(find_darwin_sdk_version var sdk_name)
-  # We deliberately don't cache the result here because
-  # CMake's caching causes too many problems.
-  set(result_process 1)
-  if(NOT DARWIN_PREFER_PUBLIC_SDK)
-    # Let's first try the internal SDK, otherwise use the public SDK.
-    execute_process(
-      COMMAND xcrun --sdk ${sdk_name}.internal --show-sdk-version
-      RESULT_VARIABLE result_process
-      OUTPUT_VARIABLE var_internal
-      OUTPUT_STRIP_TRAILING_WHITESPACE
-      ERROR_FILE /dev/null
-    )
-  endif()
-  if((NOT ${result_process} EQUAL 0) OR "" STREQUAL "${var_internal}")
-    execute_process(
-      COMMAND xcrun --sdk ${sdk_name} --show-sdk-version
-      RESULT_VARIABLE result_process
-      OUTPUT_VARIABLE var_internal
-      OUTPUT_STRIP_TRAILING_WHITESPACE
-      ERROR_FILE /dev/null
-    )
-  endif()
-  if(NOT result_process EQUAL 0)
-    message(FATAL_ERROR
-      "Failed to determine SDK version for \"${sdk_name}\" SDK")
-  endif()
-  # Check reported version looks sane.
-  if (NOT "${var_internal}" MATCHES "^[0-9]+\\.[0-9]+(\\.[0-9]+)?$")
-    message(FATAL_ERROR
-      "Reported SDK version \"${var_internal}\" does not look like a version")
-  endif()
-  set(${var} ${var_internal} PARENT_SCOPE)
 endfunction()
 
 # There isn't a clear mapping of what architectures are supported with a given
@@ -83,7 +43,7 @@ endfunction()
 # link for.
 function(darwin_get_toolchain_supported_archs output_var)
   execute_process(
-    COMMAND "${CMAKE_LINKER}" -v
+    COMMAND ld -v
     ERROR_VARIABLE LINKER_VERSION)
 
   string(REGEX MATCH "configured to support archs: ([^\n]+)"
@@ -114,22 +74,11 @@ function(darwin_test_archs os valid_archs)
     message(STATUS "Finding valid architectures for ${os}...")
     set(SIMPLE_C ${CMAKE_BINARY_DIR}${CMAKE_FILES_DIRECTORY}/src.c)
     file(WRITE ${SIMPLE_C} "#include <stdio.h>\nint main() { printf(__FILE__); return 0; }\n")
-
+  
     set(os_linker_flags)
     foreach(flag ${DARWIN_${os}_LINK_FLAGS})
       set(os_linker_flags "${os_linker_flags} ${flag}")
     endforeach()
-
-    # Disable building for i386 for macOS SDK >= 10.15. The SDK doesn't support
-    # linking for i386 and the corresponding OS doesn't allow running macOS i386
-    # binaries.
-    if ("${os}" STREQUAL "osx")
-      find_darwin_sdk_version(macosx_sdk_version "macosx")
-      if ("${macosx_sdk_version}" VERSION_GREATER 10.15 OR "${macosx_sdk_version}" VERSION_EQUAL 10.15)
-        message(STATUS "Disabling i386 slice for ${valid_archs}")
-        list(REMOVE_ITEM archs "i386")
-      endif()
-    endif()
   endif()
 
   # The simple program will build for x86_64h on the simulator because it is 
@@ -144,8 +93,7 @@ function(darwin_test_archs os valid_archs)
    
     set(arch_linker_flags "-arch ${arch} ${os_linker_flags}")
     if(TEST_COMPILE_ONLY)
-      # `-w` is used to surpress compiler warnings which `try_compile_only()` treats as an error.
-      try_compile_only(CAN_TARGET_${os}_${arch} FLAGS -v -arch ${arch} ${DARWIN_${os}_CFLAGS} -w)
+      try_compile_only(CAN_TARGET_${os}_${arch} -v -arch ${arch} ${DARWIN_${os}_CFLAGS})
     else()
       set(SAVED_CMAKE_EXE_LINKER_FLAGS ${CMAKE_EXE_LINKER_FLAGS})
       set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} ${arch_linker_flags}")
@@ -163,7 +111,7 @@ function(darwin_test_archs os valid_archs)
     endif()
   endforeach()
   set(${valid_archs} ${working_archs}
-    CACHE STRING "List of valid architectures for platform ${os}." FORCE)
+    CACHE STRING "List of valid architectures for platform ${os}.")
 endfunction()
 
 # This function checks the host cpusubtype to see if it is post-haswell. Haswell
@@ -245,7 +193,7 @@ macro(darwin_add_builtin_library name suffix)
   cmake_parse_arguments(LIB
     ""
     "PARENT_TARGET;OS;ARCH"
-    "SOURCES;CFLAGS;DEFS;INCLUDE_DIRS"
+    "SOURCES;CFLAGS;DEFS"
     ${ARGN})
   set(libname "${name}.${suffix}_${LIB_ARCH}_${LIB_OS}")
   add_library(${libname} STATIC ${LIB_SOURCES})
@@ -269,8 +217,6 @@ macro(darwin_add_builtin_library name suffix)
     ${sysroot_flag}
     ${DARWIN_${LIB_OS}_BUILTIN_MIN_VER_FLAG}
     ${builtin_cflags})
-  target_include_directories(${libname}
-    PRIVATE ${LIB_INCLUDE_DIRS})
   set_property(TARGET ${libname} APPEND PROPERTY
       COMPILE_DEFINITIONS ${LIB_DEFS})
   set_target_properties(${libname} PROPERTIES
@@ -284,7 +230,6 @@ macro(darwin_add_builtin_library name suffix)
 
   list(APPEND ${LIB_OS}_${suffix}_libs ${libname})
   list(APPEND ${LIB_OS}_${suffix}_lipo_flags -arch ${arch} $<TARGET_FILE:${libname}>)
-  set_target_properties(${libname} PROPERTIES FOLDER "Compiler-RT Libraries")
 endmacro()
 
 function(darwin_lipo_libs name)
@@ -296,25 +241,16 @@ function(darwin_lipo_libs name)
   if(LIB_DEPENDS AND LIB_LIPO_FLAGS)
     add_custom_command(OUTPUT ${LIB_OUTPUT_DIR}/lib${name}.a
       COMMAND ${CMAKE_COMMAND} -E make_directory ${LIB_OUTPUT_DIR}
-      COMMAND ${CMAKE_LIPO} -output
+      COMMAND lipo -output
               ${LIB_OUTPUT_DIR}/lib${name}.a
               -create ${LIB_LIPO_FLAGS}
       DEPENDS ${LIB_DEPENDS}
       )
     add_custom_target(${name}
       DEPENDS ${LIB_OUTPUT_DIR}/lib${name}.a)
-    set_target_properties(${name} PROPERTIES FOLDER "Compiler-RT Misc")
     add_dependencies(${LIB_PARENT_TARGET} ${name})
-
-    if(CMAKE_CONFIGURATION_TYPES)
-      set(install_component ${LIB_PARENT_TARGET})
-    else()
-      set(install_component ${name})
-    endif()
     install(FILES ${LIB_OUTPUT_DIR}/lib${name}.a
-      DESTINATION ${LIB_INSTALL_DIR}
-      COMPONENT ${install_component})
-    add_compiler_rt_install_targets(${name} PARENT_TARGET ${LIB_PARENT_TARGET})
+      DESTINATION ${LIB_INSTALL_DIR})
   else()
     message(WARNING "Not generating lipo target for ${name} because no input libraries exist.")
   endif()
@@ -335,7 +271,7 @@ macro(darwin_add_builtin_libraries)
                       ../profile/InstrProfilingPlatformDarwin
                       ../profile/InstrProfilingWriter)
   foreach (os ${ARGN})
-    list_intersect(DARWIN_BUILTIN_ARCHS DARWIN_${os}_BUILTIN_ARCHS BUILTIN_SUPPORTED_ARCH)
+    list_intersect(DARWIN_BUILTIN_ARCHS DARWIN_${os}_ARCHS BUILTIN_SUPPORTED_ARCH)
     foreach (arch ${DARWIN_BUILTIN_ARCHS})
       darwin_find_excluded_builtins_list(${arch}_${os}_EXCLUDED_BUILTINS
                               OS ${os}
@@ -375,7 +311,6 @@ macro(darwin_add_builtin_libraries)
                                 SOURCES ${filtered_sources} ${PROFILE_SOURCES}
                                 CFLAGS ${CFLAGS} -arch ${arch} -mkernel
                                 DEFS KERNEL_USE
-                                INCLUDE_DIRS ../../include
                                 PARENT_TARGET builtins)
       endforeach()
       set(archive_name clang_rt.cc_kext_${os})
@@ -464,8 +399,8 @@ macro(darwin_add_embedded_builtin_libraries)
         INCLUDE ${arch}_FUNCTIONS
         ${${arch}_SOURCES})
       if(NOT ${arch}_filtered_sources)
-        message(WARNING "${arch}_SOURCES: ${${arch}_SOURCES}")
-        message(WARNING "${arch}_FUNCTIONS: ${${arch}_FUNCTIONS}")
+        message("${arch}_SOURCES: ${${arch}_SOURCES}")
+        message("${arch}_FUNCTIONS: ${${arch}_FUNCTIONS}")
         message(FATAL_ERROR "Empty filtered sources!")
       endif()
     endforeach()
