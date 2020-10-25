@@ -46,8 +46,7 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "defs.h"
-#include "version.h"
+
 
 #include "llvm/ADT/DenseMap.h"
 #include "llvm/ADT/DenseSet.h"
@@ -95,6 +94,11 @@
 #include "llvm/Transforms/Instrumentation.h"
 #include "llvm/Transforms/Utils/BasicBlockUtils.h"
 #include "llvm/Transforms/Utils/Local.h"
+
+#include "defs.h"
+#include "version.h"
+
+
 #include <algorithm>
 #include <cassert>
 #include <cstddef>
@@ -349,6 +353,13 @@ class DataFlowSanitizer : public ModulePass {
   FunctionType *DFSanSetLabelFnTy;
   FunctionType *DFSanNonzeroLabelFnTy;
   FunctionType *DFSanVarargWrapperFnTy;
+
+  FunctionType *DFSanCombineAndFnTy;
+  FunctionType *DFSanInferShapeFnTy;
+  FunctionCallee DFSanMarkSignedFn;
+  FunctionCallee DFSanCombineAndFn;
+  FunctionCallee DFSanInferShapeFn;
+
   FunctionCallee DFSanUnionFn;
   FunctionCallee DFSanCheckedUnionFn;
   FunctionCallee DFSanUnionLoadFn;
@@ -486,9 +497,9 @@ DataFlowSanitizer::DataFlowSanitizer(
   AllABIListFiles.insert(AllABIListFiles.end(), ClABIListFiles.begin(),
                          ClABIListFiles.end());
   // FIXME: should we propagate vfs::FileSystem to this constructor?
-  // ABIList.set(
-  //     SpecialCaseList::createOrDie(AllABIListFiles, *vfs::getRealFileSystem()));
-  ABIList.set(SpecialCaseList::createOrDie(AllABIListFiles));
+  ABIList.set(
+       SpecialCaseList::createOrDie(AllABIListFiles, *vfs::getRealFileSystem()));
+  
 }
 
 FunctionType *DataFlowSanitizer::getArgsFunctionType(FunctionType *T) {
@@ -1873,21 +1884,21 @@ void DFSanVisitor::visitPHINode(PHINode &PN) {
   DFSF.setShadow(&PN, ShadowPN);
 }
 
-static RegisterPass<DataFlowSanitizer> X("dfsan_pass", "DFSan Pass");
+static RegisterPass<DataFlowSanitizer> X("dfsan_pass", "DFSan Pass",false,false);
 
-static void registerAflDFSanPass(const PassManagerBuilder &,
-                                 legacy::PassManagerBase &PM) {
+// static void registerAflDFSanPass(const PassManagerBuilder &,
+//                                  legacy::PassManagerBase &PM) {
 
-  PM.add(new DataFlowSanitizer());
-}
+//   PM.add(new DataFlowSanitizer());
+// }
 
-static RegisterStandardPasses
-    RegisterAflDFSanPass(PassManagerBuilder::EP_OptimizerLast,
-                         registerAflDFSanPass);
+// static RegisterStandardPasses
+//     RegisterAflDFSanPass(PassManagerBuilder::EP_OptimizerLast,
+//                          registerAflDFSanPass);
 
-static RegisterStandardPasses
-    RegisterAflDFSanPass0(PassManagerBuilder::EP_EnabledOnOptLevel0,
-                          registerAflDFSanPass);
+// static RegisterStandardPasses
+//     RegisterAflDFSanPass0(PassManagerBuilder::EP_EnabledOnOptLevel0,
+//                           registerAflDFSanPass);
 
 // static RegisterStandardPasses
 // RegisterAfldfPass(PassManagerBuilder::EP_EarlyAsPossible,
