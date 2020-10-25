@@ -601,6 +601,13 @@ bool DataFlowSanitizer::doInitialization(Module &M) {
   DFSanVarargWrapperFnTy = FunctionType::get(
       Type::getVoidTy(*Ctx), Type::getInt8PtrTy(*Ctx), /*isVarArg=*/false);
 
+  DFSanCombineAndFnTy =
+      FunctionType::get(Type::getVoidTy(*Ctx), ShadowPtrTy, /*isVarArg=*/false);
+
+  Type *DFSanInferShapeArgs[3] = {ShadowTy, ShadowTy, ShadowTy};
+  DFSanInferShapeFnTy = FunctionType::get(
+      Type::getVoidTy(*Ctx), DFSanInferShapeArgs, /*isVarArg=*/false);
+
   if (GetArgTLSPtr) {
     Type *ArgTLSTy = ArrayType::get(ShadowTy, 64);
     ArgTLS = nullptr;
@@ -750,6 +757,44 @@ bool DataFlowSanitizer::runOnModule(Module &M) {
 
   ExternalShadowMask =
       Mod->getOrInsertGlobal(kDFSanExternShadowPtrMask, IntptrTy);
+  {
+    AttributeList AL;
+    AL = AL.addAttribute(M.getContext(), AttributeList::FunctionIndex,
+                         Attribute::NoUnwind);
+    AL = AL.addAttribute(M.getContext(), AttributeList::FunctionIndex,
+                         Attribute::ReadNone);
+    AL = AL.addAttribute(M.getContext(), AttributeList::ReturnIndex,
+                         Attribute::ZExt);
+    AL = AL.addParamAttribute(M.getContext(), 0, Attribute::ZExt);
+    AL = AL.addParamAttribute(M.getContext(), 1, Attribute::ZExt);
+    DFSanMarkSignedFn =
+      Mod->getOrInsertFunction("dfsan_mark_signed", DFSanUnionFnTy, AL);
+  }
+
+  // find & ops.
+  {
+    AttributeList AL;
+    AL = AL.addAttribute(M.getContext(), AttributeList::FunctionIndex,
+                         Attribute::NoUnwind);
+    AL = AL.addAttribute(M.getContext(), AttributeList::FunctionIndex,
+                         Attribute::ReadNone);
+    AL = AL.addParamAttribute(M.getContext(), 0, Attribute::ZExt);                  
+    DFSanCombineAndFn =
+      Mod->getOrInsertFunction("dfsan_combine_and_ins", DFSanCombineAndFnTy, AL);
+  }
+
+  {
+    AttributeList AL;
+    AL = AL.addAttribute(M.getContext(), AttributeList::FunctionIndex,
+                         Attribute::NoUnwind);
+    AL = AL.addAttribute(M.getContext(), AttributeList::FunctionIndex,
+                         Attribute::ReadNone);
+    AL = AL.addParamAttribute(M.getContext(), 0, Attribute::ZExt);
+    AL = AL.addParamAttribute(M.getContext(), 1, Attribute::ZExt);
+    AL = AL.addParamAttribute(M.getContext(), 2, Attribute::ZExt);
+    DFSanInferShapeFn = Mod->getOrInsertFunction("dfsan_infer_shape_in_math_op",
+                                               DFSanInferShapeFnTy, AL);
+  }
 
   {
     AttributeList AL;
@@ -812,7 +857,11 @@ bool DataFlowSanitizer::runOnModule(Module &M) {
         &i != DFSanUnimplementedFn.getCallee()->stripPointerCasts() &&
         &i != DFSanSetLabelFn.getCallee()->stripPointerCasts() &&
         &i != DFSanNonzeroLabelFn.getCallee()->stripPointerCasts() &&
-        &i != DFSanVarargWrapperFn.getCallee()->stripPointerCasts())
+        &i != DFSanVarargWrapperFn.getCallee()->stripPointerCasts() &&
+        //new func
+        &i != DFSanMarkSignedFn.getCallee()->stripPointerCasts() &&
+        &i != DFSanCombineAndFn.getCallee()->stripPointerCasts() && 
+        &i != DFSanInferShapeFn.getCallee()->stripPointerCasts())
       FnsToInstrument.push_back(&i);
   }
 
@@ -1648,7 +1697,6 @@ void DFSanVisitor::visitCallSite(CallSite CS) {
   // Calls to this function are synthesized in wrappers, and we shouldn't
   // instrument them.
   if (F == DFSF.DFS.DFSanVarargWrapperFn.getCallee()->stripPointerCasts())
-  // if (F == DFSF.DFS.DFSanVarargWrapperFn)
     return;
 
   IRBuilder<> IRB(CS.getInstruction());
