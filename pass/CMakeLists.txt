@@ -12,15 +12,7 @@ else()
 endif()
 
 
-# EXECUTE_PROCESS(
-#     COMMAND cat ${CMAKE_CURRENT_SOURCE_DIR}/../../common/src/config.rs          
-#    COMMAND grep "pub const MAP_SIZE_POW2"
-#    COMMAND cut -f2 -d "="  
-#    COMMAND grep -o "[[:digit:]]*"
-#    COMMAND tr -d "\n" 
-#    OUTPUT_VARIABLE MAP_SIZE_POW2
-#)
-message(STATUS "MAP_SIZE_POW2: ${MAP_SIZE_POW2}")
+
 
 if (NOT TARGET LLVMPassConfig)
     add_library(LLVMPassConfig INTERFACE IMPORTED)
@@ -41,18 +33,11 @@ if(APPLE)
     set (CMAKE_MODULE_LINK_FLAGS "${CMAKE_CXX_LINK_FLAGS} -Wl,-flat_namespace -Wl,-undefined,suppress")
 endif(APPLE)
 
-# add_library(UnfoldBranchPass MODULE UnfoldBranchPass.cc)
-# target_link_libraries(UnfoldBranchPass LLVMPassConfig)
-# install (TARGETS UnfoldBranchPass DESTINATION ${ANGORA_PASS_DIR})
-
-# add_library(AngoraPass MODULE AngoraPass.cc)
-# target_link_libraries(AngoraPass LLVMPassConfig)
-# install (TARGETS AngoraPass DESTINATION ${ANGORA_PASS_DIR})
 
 add_library(DFSanPass MODULE DataFlowSanitizer.cpp)
 target_link_libraries(DFSanPass LLVMPassConfig)
 install (TARGETS DFSanPass DESTINATION ${ANGORA_PASS_DIR})
 
-# add_library(ChunkFuzzerPass MODULE ChunkFuzzerPass.cc)
-# target_link_libraries(ChunkFuzzerPass LLVMPassConfig)
-# install (TARGETS ChunkFuzzerPass DESTINATION ${ANGORA_PASS_DIR})
+add_library(LoopHandlingPass MODULE LoopHandlingPass.cpp)
+target_link_libraries(LoopHandlingPass LLVMPassConfig)
+install (TARGETS LoopHandlingPass DESTINATION ${ANGORA_PASS_DIR})
