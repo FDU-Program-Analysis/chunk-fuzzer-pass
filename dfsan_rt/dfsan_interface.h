@@ -15,13 +15,14 @@
 
 #include <stddef.h>
 #include <stdint.h>
-#include <sanitizer/common_interface_defs.h>
+#include "./common_interface_defs.h"
+#include "./defs.h"
 
 #ifdef __cplusplus
 extern "C" {
 #endif
 
-typedef uint16_t dfsan_label;
+typedef uint32_t dfsan_label;
 
 /// Stores information associated with a specific label identifier.  A label
 /// may be a base label created using dfsan_create_label, with associated
@@ -65,6 +66,9 @@ dfsan_label dfsan_get_label(long data);
 
 /// Retrieves the label associated with the data at the given address.
 dfsan_label dfsan_read_label(const void *addr, size_t size);
+
+/// Retrieves the starting address for the shadow memory of the given address
+const dfsan_label * dfsan_shadow_for(const void * addr);
 
 /// Retrieves a pointer to the dfsan_label_info struct for the given label.
 const struct dfsan_label_info *dfsan_get_label_info(dfsan_label label);
@@ -115,6 +119,8 @@ template <typename T>
 void dfsan_set_label(dfsan_label label, T &data) { // NOLINT
   dfsan_set_label(label, (void *)&data, sizeof(T));
 }
+#include <vector>
+const std::vector<tag_seg> dfsan_get_label_offsets(dfsan_label l);
 
 #endif
 

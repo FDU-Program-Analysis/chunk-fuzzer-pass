@@ -18,14 +18,15 @@
 // prefixed __dfsan_.
 //===----------------------------------------------------------------------===//
 
-#include "sanitizer_common/sanitizer_atomic.h"
-#include "sanitizer_common/sanitizer_common.h"
-#include "sanitizer_common/sanitizer_file.h"
-#include "sanitizer_common/sanitizer_flags.h"
-#include "sanitizer_common/sanitizer_flag_parser.h"
-#include "sanitizer_common/sanitizer_libc.h"
+#include "defs.h"
+#include "dfsan.h"
+#include "../sanitizer_common/sanitizer_atomic.h"
+#include "../sanitizer_common/sanitizer_common.h"
+#include "../sanitizer_common/sanitizer_file.h"
+#include "../sanitizer_common/sanitizer_flags.h"
+#include "../sanitizer_common/sanitizer_flag_parser.h"
+#include "../sanitizer_common/sanitizer_libc.h"
 
-#include "dfsan/dfsan.h"
 
 using namespace __dfsan;
 
@@ -242,6 +243,21 @@ __dfsan_vararg_wrapper(const char *fname) {
   Die();
 }
 
+extern "C" SANITIZER_INTERFACE_ATTRIBUTE dfsan_label
+dfsan_mark_signed(dfsan_label l1, dfsan_label l2) {
+  //TODO
+  return 0;
+}
+
+extern "C" SANITIZER_INTERFACE_ATTRIBUTE void dfsan_infer_shape_in_math_op(
+    dfsan_label l1, dfsan_label l2, u32 len) {
+  //TODO
+}
+
+extern "C" SANITIZER_INTERFACE_ATTRIBUTE void dfsan_combine_and_ins(
+    dfsan_label lb) {
+  //TODO
+}
 // Like __dfsan_union, but for use from the client or custom functions.  Hence
 // the equality comparison is done here before calling __dfsan_union.
 SANITIZER_INTERFACE_ATTRIBUTE dfsan_label
@@ -363,6 +379,10 @@ dfsan_dump_labels(int fd) {
   }
 }
 
+SANITIZER_INTERFACE_ATTRIBUTE const dfsan_label *dfsan_shadow_for(
+    const void *addr) {
+  return shadow_for(addr);
+}
 void Flags::SetDefaults() {
 #define DFSAN_FLAG(Type, Name, DefaultValue, Description) Name = DefaultValue;
 #include "dfsan_flags.inc"

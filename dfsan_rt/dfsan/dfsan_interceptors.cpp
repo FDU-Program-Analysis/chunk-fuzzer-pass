@@ -11,9 +11,9 @@
 // Interceptors for standard library functions.
 //===----------------------------------------------------------------------===//
 
-#include "dfsan/dfsan.h"
-#include "interception/interception.h"
-#include "sanitizer_common/sanitizer_common.h"
+#include "dfsan.h"
+#include "../interception/interception.h"
+#include "../sanitizer_common/sanitizer_common.h"
 
 using namespace __sanitizer;
 

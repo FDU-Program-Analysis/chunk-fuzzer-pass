@@ -14,13 +14,15 @@
 #ifndef DFSAN_H
 #define DFSAN_H
 
-#include "sanitizer_common/sanitizer_internal_defs.h"
+#include "../sanitizer_common/sanitizer_internal_defs.h"
 #include "dfsan_platform.h"
 
 using __sanitizer::uptr;
 using __sanitizer::u16;
 
 // Copy declarations from public sanitizer/dfsan_interface.h header here.
+#include "defs.h"
+
 typedef u16 dfsan_label;
 
 struct dfsan_label_info {

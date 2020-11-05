@@ -11,11 +11,11 @@
 // This file defines the custom functions listed in done_abilist.txt.
 //===----------------------------------------------------------------------===//
 
-#include "sanitizer_common/sanitizer_common.h"
-#include "sanitizer_common/sanitizer_internal_defs.h"
-#include "sanitizer_common/sanitizer_linux.h"
+#include "../sanitizer_common/sanitizer_common.h"
+#include "../sanitizer_common/sanitizer_internal_defs.h"
+#include "../sanitizer_common/sanitizer_linux.h"
 
-#include "dfsan/dfsan.h"
+#include "dfsan.h"
 
 #include <arpa/inet.h>
 #include <assert.h>
@@ -261,6 +261,17 @@ void *__dfsw_memcpy(void *dest, const void *src, size_t n,
   *ret_label = dest_label;
   return dfsan_memcpy(dest, src, n);
 }
+SANITIZER_INTERFACE_ATTRIBUTE
+void *__dfsw___mempcpy_chk(void *dest, const void *src, size_t n,
+                           size_t dst_len, dfsan_label dest_label,
+                           dfsan_label src_label, dfsan_label n_label,
+                           dfsan_label dst_len_label, dfsan_label *ret_label) {
+  if (dst_len < n) {
+    // __chk_fail ();
+  }
+  *ret_label = dest_label;
+  return dfsan_memcpy(dest, src, n);
+}
 
 SANITIZER_INTERFACE_ATTRIBUTE
 void *__dfsw_memset(void *s, int c, size_t n,
@@ -270,12 +281,43 @@ void *__dfsw_memset(void *s, int c, size_t n,
   *ret_label = s_label;
   return s;
 }
+SANITIZER_INTERFACE_ATTRIBUTE
+char *__dfsw_strcat(char *dest, const char *src, dfsan_label d_label,
+                    dfsan_label s_label, dfsan_label *ret_label) {
+  size_t len = strlen(dest);
+  dfsan_memcpy(dest + len, src, strlen(src) + 1);
+  *ret_label = d_label;
+  return dest;
+}
 
 SANITIZER_INTERFACE_ATTRIBUTE char *
 __dfsw_strdup(const char *s, dfsan_label s_label, dfsan_label *ret_label) {
   size_t len = strlen(s);
   void *p = malloc(len+1);
   dfsan_memcpy(p, s, len+1);
+  *ret_label = 0;
+  return static_cast<char *>(p);
+}
+SANITIZER_INTERFACE_ATTRIBUTE char *__dfsw___strdup(const char *s,
+                                                    dfsan_label s_label,
+                                                    dfsan_label *ret_label) {
+  size_t len = strlen(s);
+  void *p = malloc(len + 1);
+  dfsan_memcpy(p, s, len + 1);
+  *ret_label = 0;
+  return static_cast<char *>(p);
+}
+
+SANITIZER_INTERFACE_ATTRIBUTE char *__dfsw___strndup(const char *s, size_t n,
+                                                     dfsan_label s_label,
+                                                     dfsan_label n_label,
+                                                     dfsan_label *ret_label) {
+  size_t len = strlen(s);
+  if (len > n) len = n;
+  void *p = malloc(len + 1);
+  dfsan_memcpy(p, s, len);
+  *((char *)p + len) = '\0';
+
   *ret_label = 0;
   return static_cast<char *>(p);
 }
