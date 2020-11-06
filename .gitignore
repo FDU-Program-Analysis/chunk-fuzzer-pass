@@ -34,3 +34,10 @@
 #LLVM objects
 *.bc
 *.ll
+
+#debug
+.gdb_history
+
+#build & install directory
+build/*
+install/*
