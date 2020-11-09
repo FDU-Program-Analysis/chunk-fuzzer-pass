@@ -41,3 +41,12 @@
 #build & install directory
 build/*
 install/*
+
+#VS Code
+.vscode/*
+
+#Cmake files
+*/CMakeCache.txt
+*/CMakeFiles/*
+*/Makefile
+*/cmake_install.cmake
