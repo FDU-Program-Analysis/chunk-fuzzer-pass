@@ -124,7 +124,7 @@ static const char *const kDFSanExternShadowPtrMask = "__dfsan_shadow_ptr_mask";
 // we have unfortunately encountered too much code (including Clang itself;
 // see PR14291) which performs misaligned access.
 static cl::opt<bool> ClPreserveAlignment(
-    "dfsan-preserve-alignment",
+    "chunk-dfsan-preserve-alignment",
     cl::desc("respect alignment requirements provided by input IR"), cl::Hidden,
     cl::init(false));
 
@@ -136,21 +136,21 @@ static cl::opt<bool> ClPreserveAlignment(
 // unknown.  The other supported annotations are "functional" and "discard",
 // which are described below under DataFlowSanitizer::WrapperKind.
 static cl::list<std::string> ClABIListFiles(
-    "dfsan-abilist",
+    "chunk-dfsan-abilist",
     cl::desc("File listing native ABI functions and how the pass treats them"),
     cl::Hidden);
 
 // Controls whether the pass uses IA_Args or IA_TLS as the ABI for instrumented
 // functions (see DataFlowSanitizer::InstrumentedABI below).
 static cl::opt<bool> ClArgsABI(
-    "dfsan-args-abi",
+    "chunk-dfsan-args-abi",
     cl::desc("Use the argument ABI rather than the TLS ABI"),
     cl::Hidden);
 
 // Controls whether the pass includes or ignores the labels of pointers in load
 // instructions.
 static cl::opt<bool> ClCombinePointerLabelsOnLoad(
-    "dfsan-combine-pointer-labels-on-load",
+    "chunk-dfsan-combine-pointer-labels-on-load",
     cl::desc("Combine the label of the pointer with the label of the data when "
              "loading from memory."),
     cl::Hidden, cl::init(true));
@@ -158,13 +158,13 @@ static cl::opt<bool> ClCombinePointerLabelsOnLoad(
 // Controls whether the pass includes or ignores the labels of pointers in
 // stores instructions.
 static cl::opt<bool> ClCombinePointerLabelsOnStore(
-    "dfsan-combine-pointer-labels-on-store",
+    "chunk-dfsan-combine-pointer-labels-on-store",
     cl::desc("Combine the label of the pointer with the label of the data when "
              "storing in memory."),
     cl::Hidden, cl::init(false));
 
 static cl::opt<bool> ClDebugNonzeroLabels(
-    "dfsan-debug-nonzero-labels",
+    "chunk-dfsan-debug-nonzero-labels",
     cl::desc("Insert calls to __dfsan_nonzero_label on observing a parameter, "
              "load or return with a nonzero label"),
     cl::Hidden);
