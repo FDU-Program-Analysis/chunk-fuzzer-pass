@@ -7,12 +7,23 @@
 
 // clang -fsanitize=dataflow dump_labels.c
 
-//clang /home/jordan/develop/chunk-fuzzer-pass/test/loopTest.bc -o loopTest.tt -Xclang -load -Xclang ./pass/libUnfoldBranchPass.so -Xclang -load -Xclang ./pass/libAngoraPass.so -mllvm -TrackMode -mllvm -angora-dfsan-abilist=./rules/angora_abilist.txt -mllvm -angora-dfsan-abilist=./rules/dfsan_abilist.txt -mllvm -angora-exploitation-list=./rules/exploitation_list.txt -Xclang -load -Xclang ./pass/libDFSanPass.so -mllvm -angora-dfsan-abilist2=./rules/angora_abilist.txt -mllvm -angora-dfsan-abilist2=./rules/dfsan_abilist.txt -pie -fpic -Qunused-arguments -g -O3 -funroll-loops -Wl,--whole-archive ./lib/libdfsan_rt-x86_64.a -Wl,--no-whole-archive -Wl,--dynamic-list=./lib/libdfsan_rt-x86_64.a.syms ./lib/libruntime.a ./lib/libDFSanIO.a -lstdc++ -lrt -Wl,--no-as-needed -Wl,--gc-sections -ldl -lpthread -lm 
+// angora's args
+// clang /home/jordan/develop/chunk-fuzzer-pass/test/loopTest.bc -o loopTest.tt -Xclang -load -Xclang ./pass/libUnfoldBranchPass.so -Xclang -load -Xclang ./pass/libAngoraPass.so -mllvm -TrackMode -mllvm -angora-dfsan-abilist=./rules/angora_abilist.txt -mllvm -angora-dfsan-abilist=./rules/dfsan_abilist.txt -mllvm -angora-exploitation-list=./rules/exploitation_list.txt -Xclang -load -Xclang ./pass/libDFSanPass.so -mllvm -angora-dfsan-abilist2=./rules/angora_abilist.txt -mllvm -angora-dfsan-abilist2=./rules/dfsan_abilist.txt -pie -fpic -Qunused-arguments -g -O3 -funroll-loops -Wl,--whole-archive ./lib/libdfsan_rt-x86_64.a -Wl,--no-whole-archive -Wl,--dynamic-list=./lib/libdfsan_rt-x86_64.a.syms ./lib/libruntime.a ./lib/libDFSanIO.a -lstdc++ -lrt -Wl,--no-as-needed -Wl,--gc-sections -ldl -lpthread -lm 
  
-//clang -I /home/jordan/develop/chunk-fuzzer-pass/dfsan_rt/ -I /home/jordan/develop/chunk-fuzzer-pass/include/ -Xclang -load -Xclang ./pass/libDFSanPass.so -mllvm -chunk-dfsan-abilist=./rules/angora_abilist.txt -mllvm -chunk-dfsan-abilist=./rules/dfsan_abilist.txt -pie -fpic -Qunused-arguments -g -O3 -funroll-loops -Wl,--whole-archive ./lib/libdfsan_rt-x86_64.a -Wl,--no-whole-archive -Wl,--dynamic-list=./lib/libdfsan_rt-x86_64.a.syms -lstdc++ -lrt -Wl,--no-as-needed -Wl,--gc-sections -ldl -lpthread -lm /home/jordan/develop/chunk-fuzzer-pass/test/dump_labels.c -o dump_labels
+//clang -I /home/jordan/develop/chunk-fuzzer-pass/dfsan_rt/ \
+-I /home/jordan/develop/chunk-fuzzer-pass/include/ \
+-Xclang -load -Xclang ./pass/libDFSanPass.so \
+-mllvm -chunk-dfsan-abilist=./rules/angora_abilist.txt \
+-mllvm -chunk-dfsan-abilist=./rules/dfsan_abilist.txt \
+-pie -fpic -Qunused-arguments -g -O3 -funroll-loops \
+-Wl,--whole-archive ./lib/libdfsan_rt-x86_64.a -Wl,--no-whole-archive \
+-Wl,--dynamic-list=./lib/libdfsan_rt-x86_64.a.syms \
+-lstdc++ -lrt -Wl,--no-as-needed -Wl,--gc-sections \
+-ldl -lpthread -lm \
+/home/jordan/develop/chunk-fuzzer-pass/test/dump_labels.c -o dump_labels
 
-#include "../dfsan_rt/dfsan_interface.h"
-//#include <sanitizer/dfsan_interface.h>
+//#include "../dfsan_rt/dfsan_interface.h"
+#include <sanitizer/dfsan_interface.h>
 #include <assert.h>
 #include <stdio.h>
 
