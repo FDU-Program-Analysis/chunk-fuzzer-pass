@@ -23,19 +23,20 @@ using __sanitizer::u16;
 // Copy declarations from public sanitizer/dfsan_interface.h header here.
 #include "defs.h"
 
-typedef u16 dfsan_label;
+// typedef u16 dfsan_label;
 
-struct dfsan_label_info {
-  dfsan_label l1;
-  dfsan_label l2;
-  const char *desc;
-  void *userdata;
-};
+// struct dfsan_label_info {
+//   dfsan_label l1;
+//   dfsan_label l2;
+//   const char *desc;
+//   void *userdata;
+// };
 
 extern "C" {
 void dfsan_add_label(dfsan_label label, void *addr, uptr size);
 void dfsan_set_label(dfsan_label label, void *addr, uptr size);
 dfsan_label dfsan_read_label(const void *addr, uptr size);
+const dfsan_label * dfsan_shadow_for(const void * addr);
 dfsan_label dfsan_union(dfsan_label l1, dfsan_label l2);
 }  // extern "C"
 
@@ -49,7 +50,7 @@ namespace __dfsan {
 void InitializeInterceptors();
 
 inline dfsan_label *shadow_for(void *ptr) {
-  return (dfsan_label *) ((((uptr) ptr) & ShadowMask()) << 1);
+  return (dfsan_label *) ((((uptr) ptr) & ShadowMask()) << 2);
 }
 
 inline const dfsan_label *shadow_for(const void *ptr) {

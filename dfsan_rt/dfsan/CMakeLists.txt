@@ -1,4 +1,4 @@
-include_directories(..)
+# include_directories(..)
 
 # Runtime library sources and build flags.
 set(DFSAN_RTL_SOURCES

@@ -51,6 +51,7 @@ using namespace __dfsan;
 SANITIZER_INTERFACE_ATTRIBUTE SANITIZER_WEAK_ATTRIBUTE void f(__VA_ARGS__);
 
 extern "C" {
+/*
 SANITIZER_INTERFACE_ATTRIBUTE int
 __dfsw_stat(const char *path, struct stat *buf, dfsan_label path_label,
             dfsan_label buf_label, dfsan_label *ret_label) {
@@ -71,6 +72,7 @@ SANITIZER_INTERFACE_ATTRIBUTE int __dfsw_fstat(int fd, struct stat *buf,
   *ret_label = 0;
   return ret;
 }
+*/
 
 SANITIZER_INTERFACE_ATTRIBUTE char *__dfsw_strchr(const char *s, int c,
                                                   dfsan_label s_label,
@@ -220,6 +222,7 @@ __dfsw_strncasecmp(const char *s1, const char *s2, size_t n,
   return 0;
 }
 
+/*
 SANITIZER_INTERFACE_ATTRIBUTE void *__dfsw_calloc(size_t nmemb, size_t size,
                                                   dfsan_label nmemb_label,
                                                   dfsan_label size_label,
@@ -229,6 +232,7 @@ SANITIZER_INTERFACE_ATTRIBUTE void *__dfsw_calloc(size_t nmemb, size_t size,
   *ret_label = 0;
   return p;
 }
+*/
 
 SANITIZER_INTERFACE_ATTRIBUTE size_t
 __dfsw_strlen(const char *s, dfsan_label s_label, dfsan_label *ret_label) {
@@ -337,7 +341,7 @@ __dfsw_strncpy(char *s1, const char *s2, size_t n, dfsan_label s1_label,
   *ret_label = s1_label;
   return s1;
 }
-
+/*
 SANITIZER_INTERFACE_ATTRIBUTE ssize_t
 __dfsw_pread(int fd, void *buf, size_t count, off_t offset,
              dfsan_label fd_label, dfsan_label buf_label,
@@ -361,7 +365,7 @@ __dfsw_read(int fd, void *buf, size_t count,
   *ret_label = 0;
   return ret;
 }
-
+*/
 SANITIZER_INTERFACE_ATTRIBUTE int __dfsw_clock_gettime(clockid_t clk_id,
                                                        struct timespec *tp,
                                                        dfsan_label clk_id_label,
@@ -473,6 +477,7 @@ char *__dfsw_ctime_r(const time_t *timep, char *buf, dfsan_label timep_label,
   return ret;
 }
 
+/*
 SANITIZER_INTERFACE_ATTRIBUTE
 char *__dfsw_fgets(char *s, int size, FILE *stream, dfsan_label s_label,
                    dfsan_label size_label, dfsan_label stream_label,
@@ -486,6 +491,7 @@ char *__dfsw_fgets(char *s, int size, FILE *stream, dfsan_label s_label,
   }
   return ret;
 }
+*/
 
 SANITIZER_INTERFACE_ATTRIBUTE
 char *__dfsw_getcwd(char *buf, size_t size, dfsan_label buf_label,
@@ -1175,6 +1181,7 @@ int __dfsw_snprintf(char *str, size_t size, const char *format,
 }
 
 // Default empty implementations (weak). Users should redefine them.
+/*
 SANITIZER_INTERFACE_WEAK_DEF(void, __sanitizer_cov_trace_pc_guard, u32 *) {}
 SANITIZER_INTERFACE_WEAK_DEF(void, __sanitizer_cov_trace_pc_guard_init, u32 *,
                              u32 *) {}
@@ -1195,4 +1202,5 @@ SANITIZER_INTERFACE_WEAK_DEF(void, __dfsw___sanitizer_cov_trace_const_cmp4,
 SANITIZER_INTERFACE_WEAK_DEF(void, __dfsw___sanitizer_cov_trace_const_cmp8,
                              void) {}
 SANITIZER_INTERFACE_WEAK_DEF(void, __dfsw___sanitizer_cov_trace_switch, void) {}
+*/
 }  // extern "C"

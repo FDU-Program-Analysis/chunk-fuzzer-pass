@@ -18,25 +18,24 @@
 // prefixed __dfsan_.
 //===----------------------------------------------------------------------===//
 
-#include "defs.h"
-#include "dfsan.h"
-#include "../sanitizer_common/sanitizer_atomic.h"
 #include "../sanitizer_common/sanitizer_common.h"
-#include "../sanitizer_common/sanitizer_file.h"
-#include "../sanitizer_common/sanitizer_flags.h"
 #include "../sanitizer_common/sanitizer_flag_parser.h"
+#include "../sanitizer_common/sanitizer_flags.h"
 #include "../sanitizer_common/sanitizer_libc.h"
 
+#include "defs.h"
+#include "dfsan.h"
 
 using namespace __dfsan;
 
-typedef atomic_uint16_t atomic_dfsan_label;
-static const dfsan_label kInitializingLabel = -1;
+#include "../../runtime/include/tag_set.h"
+// typedef atomic_uint16_t atomic_dfsan_label;
+// static const dfsan_label kInitializingLabel = -1;
 
-static const uptr kNumLabels = 1 << (sizeof(dfsan_label) * 8);
+// static const uptr kNumLabels = 1 << (sizeof(dfsan_label) * 8);
 
-static atomic_dfsan_label __dfsan_last_label;
-static dfsan_label_info __dfsan_label_info[kNumLabels];
+// static atomic_dfsan_label __dfsan_last_label;
+// static dfsan_label_info __dfsan_label_info[kNumLabels];
 
 Flags __dfsan::flags_data;
 
@@ -135,7 +134,7 @@ SANITIZER_INTERFACE_ATTRIBUTE uptr __dfsan_shadow_ptr_mask;
 // | reserved by kernel |
 // +--------------------+ 0x0000000000
 
-typedef atomic_dfsan_label dfsan_union_table_t[kNumLabels][kNumLabels];
+// typedef atomic_dfsan_label dfsan_union_table_t[kNumLabels][kNumLabels];
 
 #ifdef DFSAN_RUNTIME_VMA
 // Runtime detected VMA size.
@@ -143,80 +142,37 @@ int __dfsan::vmaSize;
 #endif
 
 static uptr UnusedAddr() {
-  return MappingArchImpl<MAPPING_UNION_TABLE_ADDR>()
-         + sizeof(dfsan_union_table_t);
+  // return MappingArchImpl<MAPPING_UNION_TABLE_ADDR>()
+  //        + sizeof(dfsan_union_table_t);
+  return MappingArchImpl<MAPPING_UNION_TABLE_ADDR>();
 }
 
-static atomic_dfsan_label *union_table(dfsan_label l1, dfsan_label l2) {
-  return &(*(dfsan_union_table_t *) UnionTableAddr())[l1][l2];
-}
+// static atomic_dfsan_label *union_table(dfsan_label l1, dfsan_label l2) {
+//   return &(*(dfsan_union_table_t *) UnionTableAddr())[l1][l2];
+// }
 
-// Checks we do not run out of labels.
-static void dfsan_check_label(dfsan_label label) {
-  if (label == kInitializingLabel) {
-    Report("FATAL: DataFlowSanitizer: out of labels\n");
-    Die();
-  }
-}
+// // Checks we do not run out of labels.
+// static void dfsan_check_label(dfsan_label label) {
+//   if (label == kInitializingLabel) {
+//     Report("FATAL: DataFlowSanitizer: out of labels\n");
+//     Die();
+//   }
+// }
 
 // Resolves the union of two unequal labels.  Nonequality is a precondition for
 // this function (the instrumentation pass inlines the equality test).
-extern "C" SANITIZER_INTERFACE_ATTRIBUTE
-dfsan_label __dfsan_union(dfsan_label l1, dfsan_label l2) {
-  if (flags().fast16labels)
-    return l1 | l2;
-  DCHECK_NE(l1, l2);
-
-  if (l1 == 0)
-    return l2;
-  if (l2 == 0)
-    return l1;
-
-  if (l1 > l2)
-    Swap(l1, l2);
-
-  atomic_dfsan_label *table_ent = union_table(l1, l2);
-  // We need to deal with the case where two threads concurrently request
-  // a union of the same pair of labels.  If the table entry is uninitialized,
-  // (i.e. 0) use a compare-exchange to set the entry to kInitializingLabel
-  // (i.e. -1) to mark that we are initializing it.
-  dfsan_label label = 0;
-  if (atomic_compare_exchange_strong(table_ent, &label, kInitializingLabel,
-                                     memory_order_acquire)) {
-    // Check whether l2 subsumes l1.  We don't need to check whether l1
-    // subsumes l2 because we are guaranteed here that l1 < l2, and (at least
-    // in the cases we are interested in) a label may only subsume labels
-    // created earlier (i.e. with a lower numerical value).
-    if (__dfsan_label_info[l2].l1 == l1 ||
-        __dfsan_label_info[l2].l2 == l1) {
-      label = l2;
-    } else {
-      label =
-        atomic_fetch_add(&__dfsan_last_label, 1, memory_order_relaxed) + 1;
-      dfsan_check_label(label);
-      __dfsan_label_info[label].l1 = l1;
-      __dfsan_label_info[label].l2 = l2;
-    }
-    atomic_store(table_ent, label, memory_order_release);
-  } else if (label == kInitializingLabel) {
-    // Another thread is initializing the entry.  Wait until it is finished.
-    do {
-      internal_sched_yield();
-      label = atomic_load(table_ent, memory_order_acquire);
-    } while (label == kInitializingLabel);
-  }
-  return label;
+extern "C" SANITIZER_INTERFACE_ATTRIBUTE dfsan_label
+__dfsan_union(dfsan_label l1, dfsan_label l2) {
+  if (l1 == 0) return l2;
+  if (l2 == 0) return l1;
+  dfsan_label l3 = __angora_tag_set_combine(l1, l2);
+  return l3;
 }
 
 extern "C" SANITIZER_INTERFACE_ATTRIBUTE
 dfsan_label __dfsan_union_load(const dfsan_label *ls, uptr n) {
-  dfsan_label label = ls[0];
-  for (uptr i = 1; i != n; ++i) {
-    dfsan_label next_label = ls[i];
-    if (label != next_label)
-      label = __dfsan_union(label, next_label);
-  }
-  return label;
+  if (!ls) return 0;
+  return __angora_tag_set_combine_n(ls, (uint32_t)n, true);
 }
 
 extern "C" SANITIZER_INTERFACE_ATTRIBUTE
@@ -245,18 +201,20 @@ __dfsan_vararg_wrapper(const char *fname) {
 
 extern "C" SANITIZER_INTERFACE_ATTRIBUTE dfsan_label
 dfsan_mark_signed(dfsan_label l1, dfsan_label l2) {
-  //TODO
+  if (l1 > 0) __angora_tag_set_mark_sign(l1);
+  if (l2 > 0) __angora_tag_set_mark_sign(l2);
   return 0;
 }
 
 extern "C" SANITIZER_INTERFACE_ATTRIBUTE void dfsan_infer_shape_in_math_op(
     dfsan_label l1, dfsan_label l2, u32 len) {
-  //TODO
+  if (l1 > 0) __angora_tag_set_infer_shape_in_math_op(l1, len);
+  if (l2 > 0) __angora_tag_set_infer_shape_in_math_op(l2, len);
 }
 
 extern "C" SANITIZER_INTERFACE_ATTRIBUTE void dfsan_combine_and_ins(
     dfsan_label lb) {
-  //TODO
+  __angora_tag_set_combine_and(lb);
 }
 // Like __dfsan_union, but for use from the client or custom functions.  Hence
 // the equality comparison is done here before calling __dfsan_union.
@@ -268,14 +226,9 @@ dfsan_union(dfsan_label l1, dfsan_label l2) {
 }
 
 extern "C" SANITIZER_INTERFACE_ATTRIBUTE
-dfsan_label dfsan_create_label(const char *desc, void *userdata) {
-  dfsan_label label =
-    atomic_fetch_add(&__dfsan_last_label, 1, memory_order_relaxed) + 1;
-  dfsan_check_label(label);
-  __dfsan_label_info[label].l1 = __dfsan_label_info[label].l2 = 0;
-  __dfsan_label_info[label].desc = desc;
-  __dfsan_label_info[label].userdata = userdata;
-  return label;
+dfsan_label dfsan_create_label(int pos) {
+  // return __dfsan_tag_set->insert(pos);
+  return __angora_tag_set_insert(pos);
 }
 
 extern "C" SANITIZER_INTERFACE_ATTRIBUTE
@@ -320,64 +273,65 @@ __dfsw_dfsan_get_label(long data, dfsan_label data_label,
 
 SANITIZER_INTERFACE_ATTRIBUTE dfsan_label
 dfsan_read_label(const void *addr, uptr size) {
-  if (size == 0)
-    return 0;
-  return __dfsan_union_load(shadow_for(addr), size);
+  if (size == 0) return 0;
+  const dfsan_label *ls = shadow_for(addr);
+  if (!ls) return 0;
+  return __angora_tag_set_combine_n(ls, (uint32_t)size, false);
 }
 
-extern "C" SANITIZER_INTERFACE_ATTRIBUTE
-const struct dfsan_label_info *dfsan_get_label_info(dfsan_label label) {
-  return &__dfsan_label_info[label];
-}
+// extern "C" SANITIZER_INTERFACE_ATTRIBUTE
+// const struct dfsan_label_info *dfsan_get_label_info(dfsan_label label) {
+//   return &__dfsan_label_info[label];
+// }
 
-extern "C" SANITIZER_INTERFACE_ATTRIBUTE int
-dfsan_has_label(dfsan_label label, dfsan_label elem) {
-  if (label == elem)
-    return true;
-  const dfsan_label_info *info = dfsan_get_label_info(label);
-  if (info->l1 != 0) {
-    return dfsan_has_label(info->l1, elem) || dfsan_has_label(info->l2, elem);
-  } else {
-    return false;
-  }
-}
+// extern "C" SANITIZER_INTERFACE_ATTRIBUTE int
+// dfsan_has_label(dfsan_label label, dfsan_label elem) {
+//   if (label == elem)
+//     return true;
+//   const dfsan_label_info *info = dfsan_get_label_info(label);
+//   if (info->l1 != 0) {
+//     return dfsan_has_label(info->l1, elem) || dfsan_has_label(info->l2, elem);
+//   } else {
+//     return false;
+//   }
+// }
 
-extern "C" SANITIZER_INTERFACE_ATTRIBUTE dfsan_label
-dfsan_has_label_with_desc(dfsan_label label, const char *desc) {
-  const dfsan_label_info *info = dfsan_get_label_info(label);
-  if (info->l1 != 0) {
-    return dfsan_has_label_with_desc(info->l1, desc) ||
-           dfsan_has_label_with_desc(info->l2, desc);
-  } else {
-    return internal_strcmp(desc, info->desc) == 0;
-  }
-}
+// extern "C" SANITIZER_INTERFACE_ATTRIBUTE dfsan_label
+// dfsan_has_label_with_desc(dfsan_label label, const char *desc) {
+//   const dfsan_label_info *info = dfsan_get_label_info(label);
+//   if (info->l1 != 0) {
+//     return dfsan_has_label_with_desc(info->l1, desc) ||
+//            dfsan_has_label_with_desc(info->l2, desc);
+//   } else {
+//     return internal_strcmp(desc, info->desc) == 0;
+//   }
+// }
 
-extern "C" SANITIZER_INTERFACE_ATTRIBUTE uptr
-dfsan_get_label_count(void) {
-  dfsan_label max_label_allocated =
-      atomic_load(&__dfsan_last_label, memory_order_relaxed);
+// extern "C" SANITIZER_INTERFACE_ATTRIBUTE uptr
+// dfsan_get_label_count(void) {
+//   dfsan_label max_label_allocated =
+//       atomic_load(&__dfsan_last_label, memory_order_relaxed);
 
-  return static_cast<uptr>(max_label_allocated);
-}
+//   return static_cast<uptr>(max_label_allocated);
+// }
 
-extern "C" SANITIZER_INTERFACE_ATTRIBUTE void
-dfsan_dump_labels(int fd) {
-  dfsan_label last_label =
-      atomic_load(&__dfsan_last_label, memory_order_relaxed);
+// extern "C" SANITIZER_INTERFACE_ATTRIBUTE void
+// dfsan_dump_labels(int fd) {
+//   dfsan_label last_label =
+//       atomic_load(&__dfsan_last_label, memory_order_relaxed);
 
-  for (uptr l = 1; l <= last_label; ++l) {
-    char buf[64];
-    internal_snprintf(buf, sizeof(buf), "%u %u %u ", l,
-                      __dfsan_label_info[l].l1, __dfsan_label_info[l].l2);
-    WriteToFile(fd, buf, internal_strlen(buf));
-    if (__dfsan_label_info[l].l1 == 0 && __dfsan_label_info[l].desc) {
-      WriteToFile(fd, __dfsan_label_info[l].desc,
-                  internal_strlen(__dfsan_label_info[l].desc));
-    }
-    WriteToFile(fd, "\n", 1);
-  }
-}
+//   for (uptr l = 1; l <= last_label; ++l) {
+//     char buf[64];
+//     internal_snprintf(buf, sizeof(buf), "%u %u %u ", l,
+//                       __dfsan_label_info[l].l1, __dfsan_label_info[l].l2);
+//     WriteToFile(fd, buf, internal_strlen(buf));
+//     if (__dfsan_label_info[l].l1 == 0 && __dfsan_label_info[l].desc) {
+//       WriteToFile(fd, __dfsan_label_info[l].desc,
+//                   internal_strlen(__dfsan_label_info[l].desc));
+//     }
+//     WriteToFile(fd, "\n", 1);
+//   }
+// }
 
 SANITIZER_INTERFACE_ATTRIBUTE const dfsan_label *dfsan_shadow_for(
     const void *addr) {
@@ -426,26 +380,26 @@ static void InitializePlatformEarly() {
 }
 
 static void dfsan_fini() {
-  if (internal_strcmp(flags().dump_labels_at_exit, "") != 0) {
-    fd_t fd = OpenFile(flags().dump_labels_at_exit, WrOnly);
-    if (fd == kInvalidFd) {
-      Report("WARNING: DataFlowSanitizer: unable to open output file %s\n",
-             flags().dump_labels_at_exit);
-      return;
-    }
+  // if (internal_strcmp(flags().dump_labels_at_exit, "") != 0) {
+  //   fd_t fd = OpenFile(flags().dump_labels_at_exit, WrOnly);
+  //   if (fd == kInvalidFd) {
+  //     Report("WARNING: DataFlowSanitizer: unable to open output file %s\n",
+  //            flags().dump_labels_at_exit);
+  //     return;
+  //   }
 
-    Report("INFO: DataFlowSanitizer: dumping labels to %s\n",
-           flags().dump_labels_at_exit);
-    dfsan_dump_labels(fd);
-    CloseFile(fd);
-  }
+  //   Report("INFO: DataFlowSanitizer: dumping labels to %s\n",
+  //          flags().dump_labels_at_exit);
+  //   dfsan_dump_labels(fd);
+  //   CloseFile(fd);
+  // }
 }
 
-extern "C" void dfsan_flush() {
-  UnmapOrDie((void*)ShadowAddr(), UnusedAddr() - ShadowAddr());
-  if (!MmapFixedNoReserve(ShadowAddr(), UnusedAddr() - ShadowAddr()))
-    Die();
-}
+// extern "C" void dfsan_flush() {
+//   UnmapOrDie((void*)ShadowAddr(), UnusedAddr() - ShadowAddr());
+//   if (!MmapFixedNoReserve(ShadowAddr(), UnusedAddr() - ShadowAddr()))
+//     Die();
+// }
 
 static void dfsan_init(int argc, char **argv, char **envp) {
   InitializeFlags();
@@ -471,7 +425,7 @@ static void dfsan_init(int argc, char **argv, char **envp) {
   Atexit(dfsan_fini);
   AddDieCallback(dfsan_fini);
 
-  __dfsan_label_info[kInitializingLabel].desc = "<init label>";
+  // __dfsan_label_info[kInitializingLabel].desc = "<init label>";
 }
 
 #if SANITIZER_CAN_USE_PREINIT_ARRAY

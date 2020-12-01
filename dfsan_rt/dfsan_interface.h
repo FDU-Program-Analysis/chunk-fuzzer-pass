@@ -22,13 +22,12 @@
 extern "C" {
 #endif
 
-typedef uint32_t dfsan_label;
-
 /// Stores information associated with a specific label identifier.  A label
 /// may be a base label created using dfsan_create_label, with associated
 /// text description and user data, or an automatically created union label,
 /// which represents the union of two label identifiers (which may themselves
 /// be base or union labels).
+/*
 struct dfsan_label_info {
   // Fields for union labels, set to 0 for base labels.
   dfsan_label l1;
@@ -38,6 +37,7 @@ struct dfsan_label_info {
   const char *desc;
   void *userdata;
 };
+*/
 
 /// Signature of the callback argument to dfsan_set_write_callback().
 typedef void (*dfsan_write_callback_t)(int fd, const void *buf, size_t count);
@@ -47,7 +47,7 @@ typedef void (*dfsan_write_callback_t)(int fd, const void *buf, size_t count);
 dfsan_label dfsan_union(dfsan_label l1, dfsan_label l2);
 
 /// Creates and returns a base label with the given description and user data.
-dfsan_label dfsan_create_label(const char *desc, void *userdata);
+dfsan_label dfsan_create_label(int pos);
 
 /// Sets the label for each address in [addr,addr+size) to \c label.
 void dfsan_set_label(dfsan_label label, void *addr, size_t size);
@@ -71,23 +71,23 @@ dfsan_label dfsan_read_label(const void *addr, size_t size);
 const dfsan_label * dfsan_shadow_for(const void * addr);
 
 /// Retrieves a pointer to the dfsan_label_info struct for the given label.
-const struct dfsan_label_info *dfsan_get_label_info(dfsan_label label);
+// const struct dfsan_label_info *dfsan_get_label_info(dfsan_label label);
 
 /// Returns whether the given label label contains the label elem.
-int dfsan_has_label(dfsan_label label, dfsan_label elem);
+// int dfsan_has_label(dfsan_label label, dfsan_label elem);
 
 /// If the given label label contains a label with the description desc, returns
 /// that label, else returns 0.
-dfsan_label dfsan_has_label_with_desc(dfsan_label label, const char *desc);
+// dfsan_label dfsan_has_label_with_desc(dfsan_label label, const char *desc);
 
 /// Returns the number of labels allocated.
-size_t dfsan_get_label_count(void);
+// size_t dfsan_get_label_count(void);
 
 /// Flushes the DFSan shadow, i.e. forgets about all labels currently associated
 /// with the application memory. Will work only if there are no other
 /// threads executing DFSan-instrumented code concurrently.
 /// Use this call to start over the taint tracking within the same procces.
-void dfsan_flush(void);
+// void dfsan_flush(void);
 
 /// Sets a callback to be invoked on calls to write().  The callback is invoked
 /// before the write is done.  The write is not guaranteed to succeed when the
@@ -98,7 +98,7 @@ void dfsan_set_write_callback(dfsan_write_callback_t labeled_write_callback);
 /// descriptor. The lines of the output have the following format:
 ///
 /// <label> <parent label 1> <parent label 2> <label description if any>
-void dfsan_dump_labels(int fd);
+// void dfsan_dump_labels(int fd);
 
 /// Interceptor hooks.
 /// Whenever a dfsan's custom function is called the corresponding
