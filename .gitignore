@@ -41,6 +41,7 @@
 #build & install directory
 build/*
 install/*
+target/*
 
 #VS Code
 .vscode/*
