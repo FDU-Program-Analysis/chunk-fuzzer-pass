@@ -79,6 +79,7 @@
 #include "llvm/IR/Instructions.h"
 #include "llvm/IR/IntrinsicInst.h"
 #include "llvm/IR/LLVMContext.h"
+#include "llvm/IR/LegacyPassManager.h"
 #include "llvm/IR/MDBuilder.h"
 #include "llvm/IR/Module.h"
 #include "llvm/IR/Type.h"
@@ -94,6 +95,7 @@
 #include "llvm/Transforms/Instrumentation.h"
 #include "llvm/Transforms/Utils/BasicBlockUtils.h"
 #include "llvm/Transforms/Utils/Local.h"
+#include "llvm/Transforms/IPO/PassManagerBuilder.h"
 
 #include "defs.h"
 #include "version.h"
@@ -1370,14 +1372,14 @@ Value *DFSanFunction::loadShadow(Value *Addr, uint64_t Size, uint64_t Align,
     LI->setAlignment(MaybeAlign(ShadowAlign));
     return LI;
   }
-  case 2: {
-    IRBuilder<> IRB(Pos);
-    Value *ShadowAddr1 = IRB.CreateGEP(DFS.ShadowTy, ShadowAddr,
-                                       ConstantInt::get(DFS.IntptrTy, 1));
-    return combineShadows(
-        IRB.CreateAlignedLoad(DFS.ShadowTy, ShadowAddr, ShadowAlign),
-        IRB.CreateAlignedLoad(DFS.ShadowTy, ShadowAddr1, ShadowAlign), Pos);
-  }
+  // case 2: {
+  //   IRBuilder<> IRB(Pos);
+  //   Value *ShadowAddr1 = IRB.CreateGEP(DFS.ShadowTy, ShadowAddr,
+  //                                      ConstantInt::get(DFS.IntptrTy, 1));
+  //   return combineShadows(
+  //       IRB.CreateAlignedLoad(DFS.ShadowTy, ShadowAddr, ShadowAlign),
+  //       IRB.CreateAlignedLoad(DFS.ShadowTy, ShadowAddr1, ShadowAlign), Pos);
+  // }
   }
   if (!AvoidNewBlocks && Size % (64 / DFS.ShadowWidth) == 0) {
     // Fast path for the common case where each byte has identical shadow: load
@@ -1688,6 +1690,8 @@ void DFSanVisitor::visitReturnInst(ReturnInst &RI) {
 }
 
 void DFSanVisitor::visitCallSite(CallSite CS) {
+  llvm::errs() << "visitCallSite\n";
+
   Function *F = CS.getCalledFunction();
   if ((F && F->isIntrinsic()) || isa<InlineAsm>(CS.getCalledValue())) {
     visitOperandShadowInst(*CS.getInstruction());
@@ -1729,6 +1733,9 @@ void DFSanVisitor::visitCallSite(CallSite CS) {
         TransformedFunction CustomFn = DFSF.DFS.getCustomFunctionType(FT);
         std::string CustomFName = "__dfsw_";
         CustomFName += F->getName();
+                
+        llvm::errs() << "Rename " << F->getName() << "\n";
+
         FunctionCallee CustomF = DFSF.DFS.Mod->getOrInsertFunction(
             CustomFName, CustomFn.TransformedType);
         if (Function *CustomFn = dyn_cast<Function>(CustomF.getCallee())) {
@@ -1932,21 +1939,21 @@ void DFSanVisitor::visitPHINode(PHINode &PN) {
   DFSF.setShadow(&PN, ShadowPN);
 }
 
-static RegisterPass<DataFlowSanitizer> X("dfsan_pass", "DFSan Pass",false,false);
+static RegisterPass<DataFlowSanitizer> X("dfsan_pass", "DFSan Pass");
 
-// static void registerAflDFSanPass(const PassManagerBuilder &,
-//                                  legacy::PassManagerBase &PM) {
+static void registerAflDFSanPass(const PassManagerBuilder &,
+                                 legacy::PassManagerBase &PM) {
 
-//   PM.add(new DataFlowSanitizer());
-// }
+  PM.add(new DataFlowSanitizer());
+}
 
-// static RegisterStandardPasses
-//     RegisterAflDFSanPass(PassManagerBuilder::EP_OptimizerLast,
-//                          registerAflDFSanPass);
+static RegisterStandardPasses
+    RegisterAflDFSanPass(PassManagerBuilder::EP_OptimizerLast,
+                         registerAflDFSanPass);
 
-// static RegisterStandardPasses
-//     RegisterAflDFSanPass0(PassManagerBuilder::EP_EnabledOnOptLevel0,
-//                           registerAflDFSanPass);
+static RegisterStandardPasses
+    RegisterAflDFSanPass0(PassManagerBuilder::EP_EnabledOnOptLevel0,
+                          registerAflDFSanPass);
 
 // static RegisterStandardPasses
 // RegisterAfldfPass(PassManagerBuilder::EP_EarlyAsPossible,
