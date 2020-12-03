@@ -17,7 +17,10 @@
 -Xclang -load -Xclang /home/jordan/develop/chunk-fuzzer-pass/install/pass/libDFSanPass.so \
 -mllvm -chunk-dfsan-abilist=/home/jordan/develop/chunk-fuzzer-pass/install/rules/angora_abilist.txt \
 -mllvm -chunk-dfsan-abilist=/home/jordan/develop/chunk-fuzzer-pass/install/rules/dfsan_abilist.txt \
--lstdc++ -ldl -lpthread -lm -g 
+-lstdc++ -ldl -lpthread -lm -g
+
+// test-clang dump_label.c
+
 
 #include "../dfsan_rt/dfsan_interface.h"
 //#include <sanitizer/dfsan_interface.h>
