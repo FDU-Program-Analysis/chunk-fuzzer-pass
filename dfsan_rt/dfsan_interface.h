@@ -100,6 +100,9 @@ void dfsan_set_write_callback(dfsan_write_callback_t labeled_write_callback);
 /// <label> <parent label 1> <parent label 2> <label description if any>
 // void dfsan_dump_labels(int fd);
 
+// dump label's bit vector
+void dfsan_dump_label(dfsan_label label);
+
 /// Interceptor hooks.
 /// Whenever a dfsan's custom function is called the corresponding
 /// hook is called it non-zero. The hooks should be defined by the user.

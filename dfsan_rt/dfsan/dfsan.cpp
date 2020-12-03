@@ -315,6 +315,12 @@ dfsan_read_label(const void *addr, uptr size) {
 //   return static_cast<uptr>(max_label_allocated);
 // }
 
+extern "C" SANITIZER_INTERFACE_ATTRIBUTE void
+dfsan_dump_label(dfsan_label label) {
+  __angora_tag_set_show(label);
+}
+
+
 // extern "C" SANITIZER_INTERFACE_ATTRIBUTE void
 // dfsan_dump_labels(int fd) {
 //   dfsan_label last_label =
