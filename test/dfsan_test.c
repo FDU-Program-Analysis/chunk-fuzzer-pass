@@ -7,6 +7,8 @@ clang -I /home/jordan/develop/chunk-fuzzer-pass/dfsan_rt/ -I /home/jordan/develo
 /home/jordan/develop/chunk-fuzzer-pass/install/lib/libruntime.a -Wl,--gc-sections \
 -lstdc++ -ldl -lpthread -lm -g -O3 dfsan_test.c
 
+test-clang dfsan_test.c
+
 */
 
 #include "../dfsan_rt/dfsan_interface.h"
