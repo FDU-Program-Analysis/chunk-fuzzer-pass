@@ -20,6 +20,8 @@ void __angora_tag_set_combine_and(uint32_t lb);
 
 void __angora_tag_set_fini();
 
+void __angora_tag_set_show(uint32_t lb);
+
 #ifdef __cplusplus
 }
 #endif

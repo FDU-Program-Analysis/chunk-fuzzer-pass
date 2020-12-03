@@ -28,6 +28,8 @@ fun:dfsan_set_write_callback=uninstrumented
 fun:dfsan_set_write_callback=custom
 fun:dfsan_flush=uninstrumented
 fun:dfsan_flush=discard
+fun:dfsan_dump_label=uninstrumented
+fun:dfsan_dump_label=discard
 
 ###############################################################################
 # glibc

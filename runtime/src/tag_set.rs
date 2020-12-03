@@ -1,4 +1,4 @@
-const VEC_CAP: usize = (1 << 16);
+const VEC_CAP: usize = 1 << 16;
 const LABEL_WITDH: u32 = 22;
 const MAX_LB: usize = (1 << LABEL_WITDH) - 1;
 const ROOT: usize = 0;
@@ -50,6 +50,7 @@ impl TagSet {
     #[inline(always)]
     fn new_node(&mut self, parent: usize, begin: u32, end: u32) -> usize {
         let lb = self.nodes.len();
+        println!("lb:{}, parent:{}, begin:{}, end:{}",lb, parent, begin, end);
         if lb < MAX_LB {
             self.nodes.push(TagNode::new(parent, begin, end));
             lb
@@ -70,6 +71,7 @@ impl TagSet {
                 let off = self.nodes[cur_lb].seg.end;
                 let new_lb = self.new_node(last_one_lb, off, off + n);
                 self.nodes[cur_lb].left = new_lb;
+                println!("lb:{}, left:{}, right:{}, parent:{}, begin:{}, end:{}", cur_lb, self.nodes[cur_lb].left, self.nodes[cur_lb].right, self.nodes[cur_lb].parent, self.nodes[cur_lb].seg.begin, self.nodes[cur_lb].seg.end);
                 cur_lb = new_lb;
                 n = 0;
             } else if next_size > n {
@@ -100,6 +102,7 @@ impl TagSet {
                 let off = last_end;
                 let new_lb = self.new_node(last_one_lb, off, off + n);
                 self.nodes[cur_lb].right = new_lb;
+                println!("lb:{}, left:{}, right:{}, parent:{}, begin:{}, end:{}", cur_lb, self.nodes[cur_lb].left, self.nodes[cur_lb].right, self.nodes[cur_lb].parent, self.nodes[cur_lb].seg.begin, self.nodes[cur_lb].seg.end);
                 cur_lb = new_lb;
                 n = 0;
             } else {
@@ -135,6 +138,7 @@ impl TagSet {
     pub fn insert(&mut self, offset: u32) -> usize {
         let mut cur_lb = self.insert_n_zeros(ROOT, offset, ROOT);
         cur_lb = self.insert_n_ones(cur_lb, 1, ROOT);
+        println!("lb:{}, left:{}, right:{}, parent:{}, begin:{}, end:{}", cur_lb, self.nodes[cur_lb].left, self.nodes[cur_lb].right, self.nodes[cur_lb].parent, self.nodes[cur_lb].seg.begin, self.nodes[cur_lb].seg.end);
         cur_lb
     }
 
