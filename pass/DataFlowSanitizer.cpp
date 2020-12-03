@@ -1690,7 +1690,6 @@ void DFSanVisitor::visitReturnInst(ReturnInst &RI) {
 }
 
 void DFSanVisitor::visitCallSite(CallSite CS) {
-  llvm::errs() << "visitCallSite\n";
 
   Function *F = CS.getCalledFunction();
   if ((F && F->isIntrinsic()) || isa<InlineAsm>(CS.getCalledValue())) {
@@ -1734,7 +1733,6 @@ void DFSanVisitor::visitCallSite(CallSite CS) {
         std::string CustomFName = "__dfsw_";
         CustomFName += F->getName();
                 
-        llvm::errs() << "Rename " << F->getName() << "\n";
 
         FunctionCallee CustomF = DFSF.DFS.Mod->getOrInsertFunction(
             CustomFName, CustomFn.TransformedType);
