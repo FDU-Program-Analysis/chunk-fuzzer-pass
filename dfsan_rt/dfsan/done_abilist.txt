@@ -1,3 +1,53 @@
+
+##########
+# added by user
+#########
+fun:dfsan_mark_signed=uninstrumented
+fun:dfsan_mark_signed=discard
+fun:dfsan_combine_and_ins=uninstrumented
+fun:dfsan_combine_and_ins=discard
+fun:dfsan_infer_shape_in_math_op=uninstrumented
+fun:dfsan_infer_shape_in_math_op=discard
+
+fun:log10=functional
+fun:__ctype_toupper_loc=discard
+fun:isatty=discard
+fun:longjmp=discard
+fun:wait=discard
+
+### libcxx
+fun:__atomic_fetch_add_4=uninstrumented
+fun:__atomic_fetch_add_4=functional
+fun:__gxx_personality_v0=uninstrumented
+fun:__gxx_personality_v0=discard
+
+fun:_ZNSt12length_errorD1Ev=uninstrumented
+fun:_ZNSt12length_errorD1Ev=discard
+fun:_ZNSt12out_of_rangeD1Ev=uninstrumented
+fun:_ZNSt12out_of_rangeD1Ev=discard
+fun:_ZNSt16invalid_argumentD1Ev=uninstrumented
+fun:_ZNSt16invalid_argumentD1Ev=discard
+fun:_ZNSt11logic_errorD2Ev=uninstrumented
+fun:_ZNSt11logic_errorD2Ev=discard
+fun:_ZNSt13runtime_errorD1Ev=uninstrumented
+fun:_ZNSt13runtime_errorD1Ev=discard
+fun:_ZNSt13runtime_errorD2Ev=uninstrumented
+fun:_ZNSt13runtime_errorD2Ev=discard
+
+fun:_ZNKSt13runtime_error4whatEv=uninstrumented
+fun:_ZNKSt13runtime_error4whatEv=discard
+fun:_ZNKSt11logic_error4whatEv=uninstrumented
+fun:_ZNKSt11logic_error4whatEv=discard
+
+fun:__cxa_guard_acquire=uninstrumented
+fun:__cxa_guard_acquire=discard
+fun:__cxa_guard_release=uninstrumented
+fun:__cxa_guard_release=discard
+fun:__cxa_guard_abort=uninstrumented
+fun:__cxa_guard_abort=discard
+fun:__cxa_pure_virtual=uninstrumented
+fun:__cxa_pure_virtual=discard
+
 fun:main=uninstrumented
 fun:main=discard
 
@@ -26,6 +76,7 @@ fun:dfsan_has_label_with_desc=uninstrumented
 fun:dfsan_has_label_with_desc=discard
 fun:dfsan_set_write_callback=uninstrumented
 fun:dfsan_set_write_callback=custom
+fun:dfsan_shadow_for=discard
 fun:dfsan_flush=uninstrumented
 fun:dfsan_flush=discard
 fun:dfsan_dump_label=uninstrumented
@@ -34,9 +85,9 @@ fun:dfsan_dump_label=discard
 ###############################################################################
 # glibc
 ###############################################################################
-fun:malloc=discard
-fun:realloc=discard
-fun:free=discard
+# fun:malloc=discard
+# fun:realloc=discard
+# fun:free=discard
 
 # Functions that return a value that depends on the input, but the output might
 # not be necessarily data-dependent on the input.
@@ -66,6 +117,12 @@ fun:pow=functional
 fun:round=functional
 fun:sqrt=functional
 fun:wctob=functional
+fun:lrint=functional
+fun:lrintf=functional
+fun:lrintl=functional
+fun:llrint=functional
+fun:llrintf=functional
+fun:llrintl=functional
 
 # Functions that produce an output that does not depend on the input (shadow is
 # zeroed automatically).
@@ -83,22 +140,22 @@ fun:alarm=discard
 fun:atexit=discard
 fun:bind=discard
 fun:chdir=discard
-fun:close=discard
+# fun:close=discard
 fun:closedir=discard
 fun:connect=discard
 fun:dladdr=discard
 fun:dlclose=discard
-fun:fclose=discard
+# fun:fclose=discard
 fun:feof=discard
 fun:ferror=discard
 fun:fflush=discard
 fun:fileno=discard
-fun:fopen=discard
+# fun:fopen=discard
 fun:fprintf=discard
 fun:fputc=discard
 fun:fputc=discard
 fun:fputs=discard
-fun:fputs=discard
+fun:fputs_unlocked=discard
 fun:fseek=discard
 fun:ftell=discard
 fun:fwrite=discard
@@ -111,9 +168,9 @@ fun:kill=discard
 fun:listen=discard
 fun:lseek=discard
 fun:mkdir=discard
-fun:mmap=discard
-fun:munmap=discard
-fun:open=discard
+# fun:mmap=discard
+# fun:munmap=discard
+# fun:open=discard
 fun:pipe=discard
 fun:posix_fadvise=discard
 fun:posix_memalign=discard
