@@ -79,7 +79,13 @@ static u8 check_if_assembler(u32 argc, const char **argv) {
   return 0;
 }
 
+static void add_loop_handling_pass() {
+  cc_params[cc_par_cnt++] = "-Xclang";
+  cc_params[cc_par_cnt++] = "-load";
+  cc_params[cc_par_cnt++] = "-Xclang";
+  cc_params[cc_par_cnt++] = alloc_printf("%s/pass/libLoopHandlingPass.so", obj_path);
 
+}
 
 static void add_runtime() {
 
@@ -236,11 +242,13 @@ static void edit_params(u32 argc, char **argv) {
   }
 
 
-  if (!getenv("ANGORA_DONT_OPTIMIZE")) {
-    cc_params[cc_par_cnt++] = "-g";
-    cc_params[cc_par_cnt++] = "-O3";
-    cc_params[cc_par_cnt++] = "-funroll-loops";
-  }
+  // if (!getenv("ANGORA_DONT_OPTIMIZE")) {
+  //   cc_params[cc_par_cnt++] = "-g";
+  //   cc_params[cc_par_cnt++] = "-O3";
+  //   cc_params[cc_par_cnt++] = "-funroll-loops";
+  // }
+  cc_params[cc_par_cnt++] = "-g";
+  cc_params[cc_par_cnt++] = "-O0";
 
 
   if (is_cxx) {
@@ -260,6 +268,7 @@ static void edit_params(u32 argc, char **argv) {
       cc_params[cc_par_cnt++] = "none";
     }
 
+    add_loop_handling_pass();
     add_runtime();
 
     switch (bit_mode) {
