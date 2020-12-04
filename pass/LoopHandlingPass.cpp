@@ -54,6 +54,7 @@ b
 #include "llvm/AsmParser/Parser.h"
 #include "llvm/Passes/PassPlugin.h"
 #include "llvm/Passes/PassBuilder.h"
+#include "llvm/Transforms/IPO/PassManagerBuilder.h"
 
 
 
@@ -390,3 +391,16 @@ static RegisterPass<LegacyLoopHandlingPass>
       /*CFGOnly=*/false, 
       /*is_analysis=*/false
       );
+
+static void registerLegacyLoopHandlingPass(const PassManagerBuilder &,
+                                 legacy::PassManagerBase &PM) {
+  PM.add(new LegacyLoopHandlingPass());
+}
+
+static RegisterStandardPasses
+    RegisterLegacyLoopHandlingPass(PassManagerBuilder::EP_OptimizerLast,
+                         registerLegacyLoopHandlingPass);
+
+static RegisterStandardPasses
+    RegisterLegacyLoopHandlingPass0(PassManagerBuilder::EP_EnabledOnOptLevel0,
+                          registerLegacyLoopHandlingPass);
