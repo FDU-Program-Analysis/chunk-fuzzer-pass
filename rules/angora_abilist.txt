@@ -62,10 +62,14 @@ fun:mmap2=uninstrumented
 fun:mmap2=custom
 
 # input functions
+fun:read=uninstrumented
+fun:read=custom
 fun:fread=uninstrumented
 fun:fread=custom
 fun:fread_unlocked=uninstrumented
 fun:fread_unlocked=custom
+fun:pread=uninstrumented
+fun:pread=custom
 
 fun:fgetc=uninstrumented
 fun:fgetc=custom

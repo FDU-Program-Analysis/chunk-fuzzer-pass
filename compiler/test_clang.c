@@ -31,7 +31,7 @@
 #include <string.h>
 #include <unistd.h>
 
-static u8 *project_path="/home/jordan/develop/chunk-fuzzer-pass"; 
+static u8 *project_path="/home/ystttt/Desktop/chunk-fuzzer-pass"; 
 static u8 *obj_path;       /* Path to runtime libraries         */
 static u8 **cc_params;     /* Parameters passed to the real CC  */
 static u32 cc_par_cnt = 1; /* Param count, including argv0      */
@@ -42,12 +42,15 @@ static void find_obj(u8 *argv0) {
 
   u8 *slash, *tmp;
   slash = strrchr(argv0, '/');
+  printf("%s",argv0);
 
   if (slash) {
     u8 *dir;
     *slash = 0;
     dir = ck_strdup(argv0);
     *slash = '/';
+
+    printf("%s", dir);
 
     tmp = alloc_printf("%s/pass/libLoopHandlingPass.so", dir);
     if (!access(tmp, R_OK)) {
@@ -268,7 +271,7 @@ static void edit_params(u32 argc, char **argv) {
       cc_params[cc_par_cnt++] = "none";
     }
 
-    add_loop_handling_pass();
+    // add_loop_handling_pass();
     add_runtime();
 
     switch (bit_mode) {
