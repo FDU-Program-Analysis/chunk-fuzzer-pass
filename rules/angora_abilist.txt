@@ -78,7 +78,7 @@ fun:fgetc_unlocked=custom
 fun:fgets=uninstrumented
 fun:fgets=custom
 fun:fgets_unlocked=uninstrumented
-# fun:fgets_unlocked=custom
+fun:fgets_unlocked=custom
 
 fun:getline=uninstrumented
 fun:getline=custom
@@ -105,8 +105,8 @@ fun:__fxstat=custom
 # fun:getc=custom
 fun:_IO_getc=uninstrumented
 fun:_IO_getc=custom
-# fun:getchar=uninstrumented
-# fun:getchar=custom
+fun:getchar=uninstrumented
+fun:getchar=custom
 
 # gets -> fgets?
 fun:gets=uninstrumented

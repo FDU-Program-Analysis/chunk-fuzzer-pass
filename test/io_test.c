@@ -10,6 +10,8 @@
 #include <linux/fb.h>
 #include <sys/mman.h>
 #include <sys/ioctl.h>
+#include <utmpx.h>
+
 /*
 ../install/test-clang loopTest.c -o loopTest
 
@@ -234,6 +236,65 @@ void getchar_test(){
 	}
 }
 
+void fgets_test(){
+	char ch;
+	char buffer[10];
+	char dst[10];
+	for (int i = 0; i < 4 ; ++i) {
+    	fgets(buffer,3,fp);
+    	// fgets_unlocked(buffer,3,fp);
+		strcpy(dst, buffer);
+		if ( (dst[0]-'0') %3 == 0 )
+			printf("%s \n", dst);
+		dfsan_label buffer_label = dfsan_read_label(buffer,sizeof(buffer));
+		dfsan_label dst_label = dfsan_read_label(dst,sizeof(dst));
+		printf("buffer_label: %d\n", buffer_label);
+		dfsan_dump_label(buffer_label);
+		printf("dst_label: %d\n", dst_label);
+		dfsan_dump_label(dst_label);
+	}
+}
+
+void getutxent_test(){
+	struct utmpx *u;
+	if((u = getutxent()))
+    {
+        printf("%d %s %s %s \n", u->ut_type, u->ut_user, u->ut_line, u->ut_host);
+		dfsan_label u_label = dfsan_read_label(u,sizeof(u));
+		printf("u_label: %d\n", u_label);
+		dfsan_dump_label(u_label);
+    }
+	
+    endutxent();
+}
+
+void getline_test(){
+	char *buffer = NULL;
+	ssize_t n;
+	size_t size;
+	n=getline(&buffer,&size,fp);
+	for (int i = 0; i < 10 ; ++i) {
+		dfsan_label buffer_label = dfsan_read_label(buffer+i,sizeof(buffer));
+		printf("buffer_label: %d\n", buffer_label);
+		dfsan_dump_label(buffer_label);
+	}
+}
+
+void getdelim_test(){
+	char *buffer = NULL;
+	ssize_t n;
+	size_t size;
+	//此处在file文件中67之间插入了一个空格 便于测试
+	// n=getdelim(&buffer,&size,' ',fp);
+	n=__getdelim(&buffer,&size,' ',fp);
+	for (int i = 0; i < 10 ; ++i) {
+		dfsan_label buffer_label = dfsan_read_label(buffer+i,sizeof(buffer));
+		printf("buffer_label: %d\n", buffer_label);
+		dfsan_dump_label(buffer_label);
+	}
+}
+
+
 int main()
 {
 	foo();
@@ -245,7 +306,7 @@ int main()
 	printf("fp_label: %d\n", fp_label);
 	dfsan_dump_label(fp_label);
 
-	getchar_test();
+	getutxent_test();
 
     fclose(fp);
 	return 0;
