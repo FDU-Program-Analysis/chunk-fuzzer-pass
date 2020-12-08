@@ -7,7 +7,9 @@
 #include <sys/stat.h>    
 #include <fcntl.h>
 #include <unistd.h>
-
+#include <linux/fb.h>
+#include <sys/mman.h>
+#include <sys/ioctl.h>
 /*
 ../install/test-clang loopTest.c -o loopTest
 
@@ -34,6 +36,8 @@ dst_label: 19
 
 */
 
+int fd;
+FILE *fp;
 
 void foo() {
     for(int i = 0; i < 10; ++i)
@@ -63,7 +67,8 @@ void fread_test(){
 	char buffer[10];
 	char dst[10];
 	for (int i = 0; i < 4 ; ++i) {
-		fread(buffer, sizeof(char), 2, fp);
+		// fread(buffer, sizeof(char), 2, fp);
+		fread_unlocked(buffer,sizeof(char),2,fp);
 		strcpy(dst, buffer);
 		if ( (dst[0]-'0') %3 == 0 )
 			printf("%s \n", dst);
@@ -81,7 +86,7 @@ void read_test(){
 	char buffer[10];
 	char dst[10];
 	for (int i = 0; i < 4 ; ++i) {
-    read(fd,buffer,sizeof(char)*2);
+    	read(fd,buffer,sizeof(char)*2);
 		strcpy(dst, buffer);
 		if ( (dst[0]-'0') %3 == 0 )
 			printf("%s \n", dst);
@@ -100,10 +105,6 @@ void pread_test(){
 	char dst[10];
 	for (int i = 0; i < 4 ; ++i) {
     pread(fd,buffer,sizeof(char)*2,2*i);
-    // 利用fgetc的情况下出现了一个bug 在tag的追加的时候出现了问题 一般的测试用例下没有问题
-    // buffer[0] = fgetc(fp);
-    // buffer[1] = fgetc(fp);
-    gets(buffer);
 		strcpy(dst, buffer);
 		if ( (dst[0]-'0') %3 == 0 )
 			printf("%s \n", dst);
@@ -117,12 +118,14 @@ void pread_test(){
 }
 
 void fgetc_test(){
-  char ch;
+  	char ch;
 	char buffer[10];
 	char dst[10];
 	for (int i = 0; i < 4 ; ++i) {
-    buffer[0] = fgetc(fp);
-    buffer[1] = fgetc(fp);
+    // buffer[0] = fgetc(fp);
+    // buffer[1] = fgetc(fp);
+	buffer[0] = fgetc_unlocked(fp);
+	buffer[1] = fgetc_unlocked(fp);
     // gets(buffer);
 		strcpy(dst, buffer);
 		if ( (dst[0]-'0') %3 == 0 )
@@ -144,6 +147,8 @@ void fgetc_bug_test(){
 	for (int i = 0; i < 4 ; ++i) {
     buffer[2*i] = fgetc(fp);
     buffer[2*i+1] = fgetc(fp);
+	// buffer[2*i] = fgetc_unlocked(fp);
+    // buffer[2*i+1] = fgetc_unlocked(fp);
     // gets(buffer);
 		strcpy(dst, buffer);
 		if ( (dst[0]-'0') %3 == 0 )
@@ -176,21 +181,72 @@ void fgetc_bug_test(){
 // 	}
 // }
 
+void map_test(){
+	char *buffer = (char *)mmap(0, 10, PROT_READ | PROT_WRITE, MAP_SHARED,fd, 0);
+	for (int i = 0; i < 10 ; ++i) {
+		dfsan_label buffer_label = dfsan_read_label(buffer+i,sizeof(buffer));
+		printf("buffer_label: %d\n", buffer_label);
+		dfsan_dump_label(buffer_label);
+	}
+	munmap(buffer, 10);
+	for (int i = 0; i < 10 ; ++i) {
+		dfsan_label buffer_label = dfsan_read_label(buffer+i,sizeof(buffer));
+		printf("buffer_label: %d\n", buffer_label);
+		dfsan_dump_label(buffer_label);
+	}
+}
+
+void _IO_getc_test(){
+	char ch;
+	char buffer[10];
+	char dst[10];
+	for (int i = 0; i < 4 ; ++i) {
+    	buffer[0] = _IO_getc(fp);
+    	buffer[1] = _IO_getc(fp);
+		strcpy(dst, buffer);
+		if ( (dst[0]-'0') %3 == 0 )
+			printf("%s \n", dst);
+		dfsan_label buffer_label = dfsan_read_label(buffer,sizeof(buffer));
+		dfsan_label dst_label = dfsan_read_label(dst,sizeof(dst));
+		printf("buffer_label: %d\n", buffer_label);
+		dfsan_dump_label(buffer_label);
+		printf("dst_label: %d\n", dst_label);
+		dfsan_dump_label(dst_label);
+	}
+}
+
+void getchar_test(){
+	char ch;
+	char buffer[10];
+	char dst[10];
+	for (int i = 0; i < 4 ; ++i) {
+    	buffer[0] = getchar();
+    	buffer[1] = getchar();
+		strcpy(dst, buffer);
+		if ( (dst[0]-'0') %3 == 0 )
+			printf("%s \n", dst);
+		dfsan_label buffer_label = dfsan_read_label(buffer,sizeof(buffer));
+		dfsan_label dst_label = dfsan_read_label(dst,sizeof(dst));
+		printf("buffer_label: %d\n", buffer_label);
+		dfsan_dump_label(buffer_label);
+		printf("dst_label: %d\n", dst_label);
+		dfsan_dump_label(dst_label);
+	}
+}
+
 int main()
 {
 	foo();
-  int fd;
-  FILE *fp;
  	fp = fopen("file", "rb");
   // open
-  // fd = open("file",O_RDWR);
-  // fp = fdopen(fd, "r");
+  	// fd = open("file",O_RDWR);
+  	// fp = fdopen(fd, "r");
 	dfsan_label fp_label= dfsan_read_label(fp, sizeof(fp));
 	printf("fp_label: %d\n", fp_label);
 	dfsan_dump_label(fp_label);
 
-	fread_test();
+	getchar_test();
 
-  fclose(fp);
+    fclose(fp);
 	return 0;
 }

@@ -174,7 +174,7 @@ __dfsw_mmap(void *start, size_t length, int prot, int flags, int fd,
 #endif
   void *ret = mmap(start, length, prot, flags, fd, offset);
 //  if (ret > 0 && is_fuzzing_fd(fd)) {
-  if(true) {
+  if(ret>0) {
     assign_taint_labels(ret, offset, length);
   }
   *ret_label = 0;
