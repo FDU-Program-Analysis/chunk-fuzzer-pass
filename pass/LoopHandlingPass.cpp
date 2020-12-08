@@ -15,7 +15,7 @@ opt -load ./libLoopHandlingPass.so --legacy-loop-handling-pass ../test/loopTest.
 gdb opt
 b llvm::Pass::preparePassManager
 r -load ./libLoopHandlingPass.so --legacy-loop-handling-pass < ../test/loopTest.ll > /dev/null
-b loopHandler(llvm::Function&, llvm::LoopInfo&)
+b loopHandler
 b 
 */
 
@@ -26,10 +26,14 @@ b
 #include "llvm/ADT/SmallPtrSet.h"
 #include "llvm/Analysis/AliasAnalysis.h"
 #include "llvm/Analysis/ValueTracking.h"
+#include "llvm/Analysis/LoopAnalysisManager.h"
 #include "llvm/Analysis/LoopInfo.h"
+#include "llvm/Analysis/LoopIterator.h"
 #include "llvm/Analysis/LoopPass.h"
 #include "llvm/Analysis/ScalarEvolution.h"
+#include "llvm/Analysis/ScalarEvolutionExpander.h"
 #include "llvm/Analysis/ScalarEvolutionExpressions.h"
+#include "llvm/Analysis/TargetTransformInfo.h"
 #include "llvm/Analysis/IVUsers.h"
 #include "llvm/Analysis/CFG.h"
 #include "llvm/IR/DebugInfo.h"
@@ -95,9 +99,12 @@ u32 hashName(std::string str) {
     return hash;
 }
 
-struct LoopHandlingPass : public PassInfoMixin<LoopHandlingPass> {
-  PreservedAnalyses run(Function &F, FunctionAnalysisManager &)  ;
-  bool loopHandler(Function &F, LoopInfo &LI) ;
+struct LoopHandlingPass : public LoopPass {
+  static char ID;
+  unsigned long int RandSeed = 1;
+  u32 FuncID;
+  // output some debug data
+  bool output_cond_loc;
 
   // Types
   Type *VoidTy;
@@ -109,10 +116,8 @@ struct LoopHandlingPass : public PassInfoMixin<LoopHandlingPass> {
   Type *Int8PtrTy;
   Type *Int64PtrTy;
 
-  unsigned long int RandSeed = 1;
-  u32 ModId;
-  // output some debug data
-  bool output_cond_loc;
+  LoopHandlingPass() : LoopPass(ID) {}
+  bool runOnLoop(Loop * L, LPPassManager &LPM) override ;
 
   u32 getRandomNum();
   u32 getRandomInstructionId();
@@ -121,8 +126,6 @@ struct LoopHandlingPass : public PassInfoMixin<LoopHandlingPass> {
   u32 getLoopId(Loop *L);
   void setRandomNumSeed(u32 seed);
 
-// private:
-//   ScalarEvolution *SE = nullptr;
 };
 
 void LoopHandlingPass::setRandomNumSeed(u32 seed) { RandSeed = seed; }
@@ -140,7 +143,7 @@ u32 LoopHandlingPass::getInstructionId(Instruction *Inst) {
   if (Loc) {
     u32 Line = Loc->getLine();
     u32 Col = Loc->getColumn();
-    h = (Col * 33 + Line) * 33 + ModId;
+    h = (Col * 33 + Line) * 33 + FuncID;
   } 
   else {
     h = getRandomInstructionId();
@@ -167,10 +170,10 @@ u32 LoopHandlingPass::getLoopId(Loop *L) {
   if (st && ed) {
     u32 stLine = st->getLine();
     u32 stCol = st->getColumn();
-    h1 = (stCol * 33 + stLine) * 33 + ModId;
+    h1 = (stCol * 33 + stLine) * 33 + FuncID;
     u32 edLine = ed->getLine();
     u32 edCol = ed->getColumn();
-    h2 = (edCol * 33 + edLine) * 33 + ModId;
+    h2 = (edCol * 33 + edLine) * 33 + FuncID;
 
     h = (h2 + 0x9e3779b9 + (h1<<6) + (h1>>2)) ^ h1;
   }
@@ -180,22 +183,37 @@ u32 LoopHandlingPass::getLoopId(Loop *L) {
   return h;
 }
 
-bool LoopHandlingPass::loopHandler(Function &F, LoopInfo &LI) {
-  // if (!F.getName().startswith(StringRef("read_markers")))
-  //  return false;
-  if (F.isDeclaration() || F.getName().startswith(StringRef("asan.module")))
-    return false;
 
-  string FuncName = F.getParent()->getModuleIdentifier();
-  FuncName += "@";
-  FuncName += F.getName();
-  ModId = hashName(FuncName);
-  srandom(ModId);
-  setRandomNumSeed(ModId);
-  output_cond_loc = !!getenv(OUTPUT_COND_LOC_VAR);
+bool LoopHandlingPass::runOnLoop(Loop * L, LPPassManager &LPM) {
+  // if (skipLoop(L)){
+  //   outs() << "skipLoop \n ";
+  //   return false;
+  // }
+    
+  // Only visit top-level loops.
+  // if (L->getParentLoop()) {
+  //   outs() << "getParentLoop \n ";
+  //   return false;
+  // }
 
-  bool Instrumented = false;
+  // llvm::printLoop(*L, outs()) ;
+  // bool Instrumented = false;
+  const Function &F = *L->getHeader()->getParent();
+  Module &M = *L->getHeader()->getModule();
   auto &CTX = F.getContext();
+
+  string FuncName = F.getName();
+  if (F.getName().startswith(StringRef("__dfsw_"))) {
+    return false;
+  }
+
+  FuncID = hashName(FuncName);
+  srandom(FuncID);
+  setRandomNumSeed(FuncID);
+
+  // outs() << "FuncName: " << FuncName << "\n";
+
+  output_cond_loc = !!getenv(OUTPUT_COND_LOC_VAR);
 
   VoidTy = Type::getVoidTy(CTX);
   Int1Ty = IntegerType::getInt1Ty(CTX);
@@ -205,11 +223,24 @@ bool LoopHandlingPass::loopHandler(Function &F, LoopInfo &LI) {
   Int8PtrTy = PointerType::getUnqual(Int8Ty);
   Int64PtrTy = PointerType::getUnqual(Int64Ty);
 
+  // insert a global variable FLAG in the current function
+  // This will insert a declaration into F
+  std::string FunctionLoopFlagName = std::string(FuncName + "_LoopFlag");
+  Constant *FunctionLoopFlag = 
+      M.getOrInsertGlobal(FunctionLoopFlagName, Int8Ty);
+  
+  // This will change the declaration into definition (and initialise to 0)
+  GlobalVariable *NewGV = M.getNamedGlobal(FunctionLoopFlagName);
+  NewGV->setLinkage(GlobalValue::CommonLinkage);
+  NewGV->setAlignment(MaybeAlign(1));
+  NewGV->setInitializer(llvm::ConstantInt::get(CTX, APInt(8, 0)));
+
+
   // inject the declaration of printf
   Type *PrintfArgTy = Int8PtrTy;
   FunctionType *PrintfTy =
       FunctionType::get(Int32Ty, PrintfArgTy, true);
-  FunctionCallee Printf = F.getParent()->getOrInsertFunction("printf", PrintfTy);
+  FunctionCallee Printf = M.getOrInsertFunction("printf", PrintfTy);
 
   // set attributes
   Function *PrintfF = dyn_cast<Function>(Printf.getCallee());
@@ -220,187 +251,129 @@ bool LoopHandlingPass::loopHandler(Function &F, LoopInfo &LI) {
   // create & initialize the printf format string
   Constant *FormatStr = ConstantDataArray::getString(CTX, "Loop hash :%u, \n Instruction hash :%u,\n induction variable value: %d\n");
   Constant *FormatStrVar =
-      F.getParent()->getOrInsertGlobal("FormatStr", FormatStr->getType());
+      M.getOrInsertGlobal("FormatStr", FormatStr->getType());
   dyn_cast<GlobalVariable>(FormatStrVar)->setInitializer(FormatStr);
 
-  StringRef Name = F.getName();
-  outs() << "name: " << Name << "\n";
+  u32 hLoop = getLoopId(L);
+  ConstantInt *HLoop = ConstantInt::get(Int32Ty, hLoop);
+  ConstantInt *NumZero = ConstantInt::get(Int32Ty, 0);
 
-  for (auto &LIT : LI) { 
-    Loop &L = *LIT;
-    //llvm::printLoop(L, outs());
-    u32 hLoop = getLoopId(&L);
-    ConstantInt *HLoop = ConstantInt::get(Int32Ty, hLoop);
-    ConstantInt *NumZero = ConstantInt::get(Int32Ty, 0);
-    
-    //Get an IR builder. Sets the insertion point to loop header
-    //outs() << "loop header:\n" << *L.getHeader();
-    
-    //flag = true;
-    IRBuilder<> HeaderBuilder(&*L.getHeader()->getFirstInsertionPt());
-    Value *FormatStrPtr = HeaderBuilder.CreatePointerCast(
-                    FormatStrVar, PrintfArgTy, "formatStr");
-    HeaderBuilder.CreateCall(Printf, {FormatStrPtr, HLoop, NumZero, NumZero});
-    
-    // get Latches and ExitingBlocks to get backedges and exiting edges
-    SmallVector<BasicBlock *, 16> Latches;
-    L.getLoopLatches(Latches);
-    for (auto &LatchI : Latches) {
-      outs() << "loop lacth :\n" << *LatchI;
-    }
-    SmallVector<BasicBlock *, 16> Exitings;
-    L.getExitingBlocks(Exitings);
-    for (auto &ExitingI : Exitings) {
-      outs() << "loop exiting :\n" << *ExitingI;
-    }
-    //backedges and exiting edges
-    SmallSet<Instruction *, 32> Backedges;
-    for(BasicBlock *BB : Latches) {
-      //instrument before jump instruction
-      BasicBlock::reverse_iterator i = BB->rbegin();
+
+  
+  //Get an IR builder. Sets the insertion point to loop header
+  //outs() << "loop header:\n" << *L.getHeader();
+  
+  //Enter Loop : set flag = true;
+  ConstantInt *NumOne = ConstantInt::get(Int8Ty, 1);
+  IRBuilder<> HeaderBuilder(&*L->getHeader()->getFirstInsertionPt());
+  HeaderBuilder.CreateStore(NumOne, FunctionLoopFlag);
+  // Value *FormatStrPtr = HeaderBuilder.CreatePointerCast(
+  //                 FormatStrVar, PrintfArgTy, "formatStr");
+  // HeaderBuilder.CreateCall(Printf, {FormatStrPtr, HLoop, NumZero, NumZero});
+  
+  // get Latches and ExitingBlocks to get backedges and exiting edges
+  SmallVector<BasicBlock *, 16> Latches;
+  L->getLoopLatches(Latches);
+  // for (auto &LatchI : Latches) {
+  //   outs() << "loop lacth :\n" << *LatchI;
+  // }
+  SmallVector<BasicBlock *, 16> Exitings;
+  L->getExitingBlocks(Exitings);
+  // for (auto &ExitingI : Exitings) {
+  //   outs() << "loop exiting :\n" << *ExitingI;
+  // }
+  //backedges and exiting edges
+  SmallSet<Instruction *, 32> Backedges;
+  for(BasicBlock *BB : Latches) {
+    //instrument before jump instruction
+    BasicBlock::reverse_iterator i = BB->rbegin();
 
       if (i != BB->rend()) {
-
-        //If the previous instruction of the jump instruction 
-        //is a comparison instruction, then instrument before the comparison instruction
-        BasicBlock::reverse_iterator i2 = BB->rbegin();
-        i2++;
-        if (i2 != BB->rend() && isa<CmpInst>(&*i2)) {
-          outs() << "backedges: \n" << *i2 << "\n";
-          Backedges.insert(&*i2);
-        }
-        else {
-          outs() << "backedges: \n" << *i << "\n";
-          Backedges.insert(&*i);
-        }
+      //If the previous instruction of the jump instruction 
+      //is a comparison instruction, then instrument before the comparison instruction
+      BasicBlock::reverse_iterator i2 = BB->rbegin();
+      i2++;
+      if (i2 != BB->rend() && isa<CmpInst>(&*i2)) {
+        // outs() << "backedges: \n" << *i2 << "\n";
+        Backedges.insert(&*i2);
+      }
+      else {
+        // outs() << "backedges: \n" << *i << "\n";
+        Backedges.insert(&*i);
       }
     }
+  }
 
-    SmallSet<Instruction *, 32> Exitingedges;
-    for(BasicBlock *BB : Exitings) {
-      BasicBlock::reverse_iterator i = BB->rbegin();
-      if (i != BB->rend()) {
-        BasicBlock::reverse_iterator i2 = BB->rbegin();
-        i2++;
-        if (i2 != BB->rend() && isa<CmpInst>(&*i2)) {
-          outs() << "backedges: \n" << *i2 << "\n";
-          Exitingedges.insert(&*i2);
-        }
-        else {
-          outs() << "backedges: \n" << *i << "\n";
-          Exitingedges.insert(&*i);
-        }
+  SmallSet<Instruction *, 32> Exitingedges;
+  for(BasicBlock *BB : Exitings) {
+    BasicBlock::reverse_iterator i = BB->rbegin();
+    if (i != BB->rend()) {
+      BasicBlock::reverse_iterator i2 = BB->rbegin();
+      i2++;
+      if (i2 != BB->rend() && isa<CmpInst>(&*i2)) {
+        // outs() << "exitings: \n" << *i2 << "\n";
+        Exitingedges.insert(&*i2);
+      }
+      else {
+        // outs() << "exitings: \n" << *i << "\n";
+        Exitingedges.insert(&*i);
       }
     }
-
-    // dump chunk info
-    for (Instruction * Inst : Backedges) {
-      u32 hInst = getInstructionId(Inst);
-      ConstantInt *HInst = ConstantInt::get(Int32Ty, hInst);
-
-      IRBuilder<> InstBuilder(Inst);
-      Value *FormatStrPtr = InstBuilder.CreatePointerCast(
-                    FormatStrVar, PrintfArgTy, "formatStr");
-      InstBuilder.CreateCall(Printf, {FormatStrPtr, HLoop, HInst, NumZero});
-      
-    }
-
-    //dump chunk info
-    //flag = false
-    for (Instruction * Inst : Exitingedges) {
-      u32 hInst = getInstructionId(Inst);
-      ConstantInt *HInst = ConstantInt::get(Int32Ty, hInst);
-      //get induction variable value
-      IRBuilder<> InstBuilder(Inst);
-      Value *FormatStrPtr = InstBuilder.CreatePointerCast(
-                    FormatStrVar, PrintfArgTy, "formatStr");
-      InstBuilder.CreateCall(Printf, {FormatStrPtr, HLoop, HInst, NumZero});
-      
-    }
-
-    
-  }
-  return Instrumented;
-
-} //loopHandler end
-
-PreservedAnalyses LoopHandlingPass::run(Function &F, FunctionAnalysisManager &FAM) {
-  LoopInfo &LI = FAM.getResult<LoopAnalysis>(F);
-    bool Changed = loopHandler(F, LI);
-    // SE = &getAnalysis<ScalarEvolutionWrapperPass>().getSE();
-
-    return (Changed ? PreservedAnalyses::none() : PreservedAnalyses::all());
-} // run end
-
-//------------------------------------------------------------------------------
-// Legacy PM interface
-//------------------------------------------------------------------------------
-struct LegacyLoopHandlingPass : public FunctionPass {
-  static char ID;
-  LegacyLoopHandlingPass() : FunctionPass(ID) {}
-  bool runOnFunction(Function &F) override {
-
-    bool changed = Impl.loopHandler(F, getAnalysis<LoopInfoWrapperPass>().getLoopInfo());
-
-    return changed;
-  };
-  void getAnalysisUsage(AnalysisUsage &AU) const {
-      AU.addRequired<LoopInfoWrapperPass>();
-      // AU.addRequired<ScalarEvolutionWrapperPass>();
   }
 
-  LoopHandlingPass Impl;
-  // LoopHandlingPass::SE = &getAnalysis<ScalarEvolutionWrapperPass>().getSE();
-};
+  // instrument and dump chunk info
+  for (Instruction * Inst : Backedges) {
+    u32 hInst = getInstructionId(Inst);
+    ConstantInt *HInst = ConstantInt::get(Int32Ty, hInst);
 
-} // namespace
+    IRBuilder<> InstBuilder(Inst);
+    Value *FormatStrPtr = InstBuilder.CreatePointerCast(
+                  FormatStrVar, PrintfArgTy, "formatStr");
+    InstBuilder.CreateCall(Printf, {FormatStrPtr, HLoop, HInst, NumZero});
+    // insert dump labels
+  }
 
-//-----------------------------------------------------------------------------
-// New PM Registration
-//-----------------------------------------------------------------------------
-PassPluginLibraryInfo getLoopHandlingPassPluginInfo() {
-  return {LLVM_PLUGIN_API_VERSION, "LoopHandlingPass", LLVM_VERSION_STRING,
-          [](PassBuilder &PB) {
-            PB.registerPipelineParsingCallback(
-                [](StringRef Name, FunctionPassManager &MPM,
-                   ArrayRef<PassBuilder::PipelineElement>) {
-                  if (Name == "loop-handling-pass") {
-                    MPM.addPass(LoopHandlingPass());
-                    return true;
-                  }
-                  return false;
-                });
-          }};
-}
+  //instrument dump chunk info
+  //flag = false
+  for (Instruction * Inst : Exitingedges) {
+    u32 hInst = getInstructionId(Inst);
+    ConstantInt *HInst = ConstantInt::get(Int32Ty, hInst);
+    //get induction variable value
+    IRBuilder<> InstBuilder(Inst);
+    Value *FormatStrPtr = InstBuilder.CreatePointerCast(
+                  FormatStrVar, PrintfArgTy, "formatStr");
+    InstBuilder.CreateCall(Printf, {FormatStrPtr, HLoop, HInst, NumZero});
+    //insert dump labels
+  }
 
-extern "C" LLVM_ATTRIBUTE_WEAK ::PassPluginLibraryInfo
-llvmGetPassPluginInfo() {
-  return getLoopHandlingPassPluginInfo();
-}
+  
+  return true;
+  // return Instrumented;
 
-//-----------------------------------------------------------------------------
-// Legacy PM Registration
-//-----------------------------------------------------------------------------
-char LegacyLoopHandlingPass::ID = 0;
+} //runOnLoop end
+
+} // namespace end
+
+char LoopHandlingPass::ID = 0;
 
 // Register the pass - required for (among others) opt
-static RegisterPass<LegacyLoopHandlingPass>
+static RegisterPass<LoopHandlingPass>
     X(
-      /*PassArg=*/"legacy-loop-handling-pass", 
-      /*Name=*/"LegacyLoopHandlingPass",
+      /*PassArg=*/"loop-handling-pass", 
+      /*Name=*/"LoopHandlingPass",
       /*CFGOnly=*/false, 
       /*is_analysis=*/false
       );
 
-static void registerLegacyLoopHandlingPass(const PassManagerBuilder &,
+static void registerLoopHandlingPass(const PassManagerBuilder &,
                                  legacy::PassManagerBase &PM) {
-  PM.add(new LegacyLoopHandlingPass());
+  PM.add(new LoopHandlingPass());
 }
 
 static RegisterStandardPasses
-    RegisterLegacyLoopHandlingPass(PassManagerBuilder::EP_OptimizerLast,
-                         registerLegacyLoopHandlingPass);
+    RegisterLoopHandlingPass(PassManagerBuilder::EP_OptimizerLast,
+                         registerLoopHandlingPass);
 
 static RegisterStandardPasses
-    RegisterLegacyLoopHandlingPass0(PassManagerBuilder::EP_EnabledOnOptLevel0,
-                          registerLegacyLoopHandlingPass);
+    RegisterLoopHandlingPass0(PassManagerBuilder::EP_EnabledOnOptLevel0,
+                          registerLoopHandlingPass);
