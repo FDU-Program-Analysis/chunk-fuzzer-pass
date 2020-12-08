@@ -55,7 +55,7 @@ void stat_test() {
   dfsan_dump_label(stat_label);
 }
 
-void fstat_test(int fd){
+void fstat_test(){
     struct stat buf;
     fstat(fd,&buf);
     printf("file size = %ld\n", buf.st_size);
@@ -63,6 +63,16 @@ void fstat_test(int fd){
     printf("stat_label: %d\n", stat_label);
     dfsan_dump_label(stat_label);
 }
+
+void lstat_test(){
+    struct stat buf;
+    lstat("file", &buf);
+  	printf("file size = %ld\n", buf.st_size);
+  	dfsan_label stat_label = dfsan_read_label(&buf.st_size,sizeof(buf.st_size));
+  	printf("stat_label: %d\n", stat_label);
+  	dfsan_dump_label(stat_label);
+}
+
 
 void fread_test(){
   char ch;
@@ -294,19 +304,45 @@ void getdelim_test(){
 	}
 }
 
+void xstat_test(){
+	struct stat buf;
+  	__xstat(1,"file", &buf);
+  	printf("file size = %ld\n", buf.st_size);
+  	dfsan_label stat_label = dfsan_read_label(&buf.st_size,sizeof(buf.st_size));
+  	printf("stat_label: %d\n", stat_label);
+  	dfsan_dump_label(stat_label);
+}
+
+void fxstat_test(){
+	struct stat buf;
+  	__fxstat(1, fd, &buf);
+  	printf("file size = %ld\n", buf.st_size);
+  	dfsan_label stat_label = dfsan_read_label(&buf.st_size,sizeof(buf.st_size));
+  	printf("stat_label: %d\n", stat_label);
+  	dfsan_dump_label(stat_label);
+}
+
+void lxstat_test(){
+	struct stat buf;
+  	__lxstat(1, "file", &buf);
+  	printf("file size = %ld\n", buf.st_size);
+  	dfsan_label stat_label = dfsan_read_label(&buf.st_size,sizeof(buf.st_size));
+  	printf("stat_label: %d\n", stat_label);
+  	dfsan_dump_label(stat_label);
+}
 
 int main()
 {
 	foo();
- 	fp = fopen("file", "rb");
+ 	// fp = fopen("file", "rb");
   // open
-  	// fd = open("file",O_RDWR);
-  	// fp = fdopen(fd, "r");
+  	fd = open("file",O_RDWR);
+  	fp = fdopen(fd, "r");
 	dfsan_label fp_label= dfsan_read_label(fp, sizeof(fp));
 	printf("fp_label: %d\n", fp_label);
 	dfsan_dump_label(fp_label);
 
-	getutxent_test();
+	lstat_test();
 
     fclose(fp);
 	return 0;
