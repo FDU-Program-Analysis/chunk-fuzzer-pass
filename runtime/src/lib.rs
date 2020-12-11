@@ -5,6 +5,7 @@ pub mod logger;
 mod tag_set;
 pub mod tag_set_wrap;
 pub mod track;
+pub mod loop_handlers;
 
 use crate::logger::Logger;
 pub use crate::{logger::get_log_data, tag_set::TagSet};

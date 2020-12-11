@@ -5,6 +5,10 @@ fun:dfsan_get_label_range=uninstrumented
 fun:dfsan_get_label_range=discard
 
 ### RT
+# Loop-Handler
+fun:__chunk_get_dump_label=uninstrumented
+fun:__chunk_get_dump_label=custom
+
 # Trace-PC
 fun:__angora_trace_cmp=uninstrumented
 fun:__angora_trace_cmp=discard
