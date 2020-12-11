@@ -194,6 +194,7 @@ static void edit_params(u32 argc, char **argv) {
   }
 
   if (!maybe_assembler) {
+    add_loop_handling_pass();
     add_dfsan_pass();
   }
 
@@ -207,6 +208,7 @@ static void edit_params(u32 argc, char **argv) {
   cc_params[cc_par_cnt++] = "-pie";
   cc_params[cc_par_cnt++] = "-fpic";
   cc_params[cc_par_cnt++] = "-Qunused-arguments";
+  cc_params[cc_par_cnt++] = "-fno-discard-value-names";
 
   if (getenv("ANGORA_HARDEN")) {
     cc_params[cc_par_cnt++] = "-fstack-protector-all";
@@ -268,7 +270,7 @@ static void edit_params(u32 argc, char **argv) {
       cc_params[cc_par_cnt++] = "none";
     }
 
-    add_loop_handling_pass();
+
     add_runtime();
 
     switch (bit_mode) {
