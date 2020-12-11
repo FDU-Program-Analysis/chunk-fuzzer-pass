@@ -21,7 +21,7 @@ b
 
 
 
-
+#include "llvm/ADT/DenseSet.h"
 #include "llvm/ADT/Statistic.h"
 #include "llvm/ADT/SmallPtrSet.h"
 #include "llvm/Analysis/AliasAnalysis.h"
@@ -51,6 +51,7 @@ b
 #include "llvm/Support/ErrorHandling.h"
 #include "llvm/Support/SourceMgr.h"
 #include "llvm/Support/CommandLine.h"
+#include "llvm/Transforms/IPO/PassManagerBuilder.h"
 #include "llvm/Transforms/Utils/BasicBlockUtils.h"
 #include "llvm/Pass.h"
 #include "llvm/PassAnalysisSupport.h"
@@ -58,10 +59,6 @@ b
 #include "llvm/AsmParser/Parser.h"
 #include "llvm/Passes/PassPlugin.h"
 #include "llvm/Passes/PassBuilder.h"
-#include "llvm/Transforms/IPO/PassManagerBuilder.h"
-
-
-
 #include <fstream>
 #include <stdio.h>
 #include <stdlib.h>
@@ -114,17 +111,40 @@ struct LoopHandlingPass : public LoopPass {
   IntegerType *Int32Ty;
   IntegerType *Int64Ty;
   Type *Int8PtrTy;
+  Type *Int32PtrTy;
   Type *Int64PtrTy;
+
+  Type *PrintfArg;
+  // Global vars
+  // GlobalVariable *AngoraMapPtr;
+
+
+  // Constants
+  Constant *FormatStrVar;
+
+
+  FunctionCallee PrintfFn;
+  FunctionCallee LoadLabelDumpFn;
 
   LoopHandlingPass() : LoopPass(ID) {}
   bool runOnLoop(Loop * L, LPPassManager &LPM) override ;
 
+  //user defined functions
   u32 getRandomNum();
   u32 getRandomInstructionId();
   u32 getInstructionId(Instruction *Inst);
   u32 getRandomLoopId();
   u32 getLoopId(Loop *L);
   void setRandomNumSeed(u32 seed);
+  void initVariables(Function &F, Module &M);
+
+  void visitCallInst(Instruction *Inst);
+  void visitInvokeInst(Instruction *Inst);
+  void visitLoadInst(Instruction *Inst);
+
+  void processCallInst(Instruction *Inst);
+  void processLoadInst(Instruction *Cond, Instruction *InsertPoint);
+  u32 handleFunction(Function *F);
 
 };
 
@@ -164,6 +184,7 @@ u32 LoopHandlingPass::getInstructionId(Instruction *Inst) {
 u32 LoopHandlingPass::getRandomLoopId() { return getRandomNum(); }
 
 u32 LoopHandlingPass::getLoopId(Loop *L) {
+
   u32 h1 = 0,h2 = 0, h = 0;
   DILocation *st= L->getStartLoc();
   DILocation *ed= L->getLocRange().getEnd();;
@@ -183,36 +204,16 @@ u32 LoopHandlingPass::getLoopId(Loop *L) {
   return h;
 }
 
+std::set<u32> LoopSet;
+std::set<u32> FuncSet;
 
-bool LoopHandlingPass::runOnLoop(Loop * L, LPPassManager &LPM) {
-  // if (skipLoop(L)){
-  //   outs() << "skipLoop \n ";
-  //   return false;
-  // }
-    
-  // Only visit top-level loops.
-  // if (L->getParentLoop()) {
-  //   outs() << "getParentLoop \n ";
-  //   return false;
-  // }
-
-  // llvm::printLoop(*L, outs()) ;
-  // bool Instrumented = false;
-  const Function &F = *L->getHeader()->getParent();
-  Module &M = *L->getHeader()->getModule();
+void LoopHandlingPass::initVariables(Function &F, Module &M) {
   auto &CTX = F.getContext();
-
   string FuncName = F.getName();
-  if (F.getName().startswith(StringRef("__dfsw_"))) {
-    return false;
-  }
-
   FuncID = hashName(FuncName);
-  srandom(FuncID);
+  errs() << "FuncName: " << FuncName << " -- " << FuncID << "\n";
+  // srandom(FuncID);
   setRandomNumSeed(FuncID);
-
-  // outs() << "FuncName: " << FuncName << "\n";
-
   output_cond_loc = !!getenv(OUTPUT_COND_LOC_VAR);
 
   VoidTy = Type::getVoidTy(CTX);
@@ -221,8 +222,164 @@ bool LoopHandlingPass::runOnLoop(Loop * L, LPPassManager &LPM) {
   Int32Ty = IntegerType::getInt32Ty(CTX);
   Int64Ty = IntegerType::getInt64Ty(CTX);
   Int8PtrTy = PointerType::getUnqual(Int8Ty);
+  Int32PtrTy = PointerType::getUnqual(Int32Ty);
   Int64PtrTy = PointerType::getUnqual(Int64Ty);
 
+  // inject the declaration of printf
+  PrintfArg = Int8PtrTy;
+  FunctionType *PrintfTy = FunctionType::get(Int32Ty, PrintfArg, true);
+
+  // set attributes
+  {
+    AttributeList AL;
+    AL = AL.addAttribute(CTX, AttributeList::FunctionIndex,
+                         Attribute::NoUnwind);
+    AL = AL.addAttribute(CTX, AttributeList::FunctionIndex,
+                         Attribute::NoCapture);
+    AL = AL.addAttribute(CTX, AttributeList::FunctionIndex,
+                         Attribute::ReadOnly);
+    PrintfFn = M.getOrInsertFunction("printf", PrintfTy, AL);                     
+  }
+
+  // create & initialize the printf format string
+  Constant *FormatStr = ConstantDataArray::getString(CTX, "Loop hash :%u, \n Instruction hash :%u,\n induction variable value: %d\n");
+  FormatStrVar =
+      M.getOrInsertGlobal("FormatStr", FormatStr->getType());
+  dyn_cast<GlobalVariable>(FormatStrVar)->setInitializer(FormatStr);
+
+
+  Type *LoadLabelDumpArgs[2] = {Int8PtrTy, Int32Ty};
+  FunctionType *LoadLabelDumpArgsTy = FunctionType::get(VoidTy, LoadLabelDumpArgs, false);
+  {
+    AttributeList AL;
+    AL = AL.addAttribute(CTX, AttributeList::FunctionIndex,
+                         Attribute::NoUnwind);
+    // AL = AL.addAttribute(CTX, AttributeList::FunctionIndex,
+    //                      Attribute::NoCapture);
+    AL = AL.addAttribute(CTX, AttributeList::FunctionIndex,
+                         Attribute::ReadOnly);
+    LoadLabelDumpFn = M.getOrInsertFunction("__chunk_get_dump_label", LoadLabelDumpArgsTy, AL);   
+  }
+}
+
+void LoopHandlingPass::visitCallInst(Instruction *Inst) {
+
+  CallInst *Caller = dyn_cast<CallInst>(Inst);
+  Function *Callee = Caller->getCalledFunction();
+
+  if (!Callee || Callee->isIntrinsic() || isa<InlineAsm>(Caller->getCalledValue())) {
+    return;
+  }
+
+  // remove inserted "unfold" functions
+  if (!Callee->getName().compare(StringRef("__unfold_branch_fn"))) {
+    if (Caller->use_empty()) {
+      Caller->eraseFromParent();
+    }
+    return;
+  }
+
+  // instrument before CALL
+  processCallInst(Inst);
+};
+
+void LoopHandlingPass::visitInvokeInst(Instruction *Inst) {
+
+  InvokeInst *Caller = dyn_cast<InvokeInst>(Inst);
+  Function *Callee = Caller->getCalledFunction();
+
+  if (!Callee || Callee->isIntrinsic() ||
+      isa<InlineAsm>(Caller->getCalledValue())) {
+    return;
+  }
+
+  // instrument before INVOKE
+  processCallInst(Inst);
+}
+
+void LoopHandlingPass::visitLoadInst(Instruction *Inst) {
+  // instrument after LOAD
+  Instruction *InsertPoint = Inst->getNextNode();
+  if (!InsertPoint || isa<ConstantInt>(Inst))
+    return;
+  Constant *Cid = ConstantInt::get(Int32Ty, getInstructionId(Inst));
+  processLoadInst(Inst, InsertPoint);
+}
+
+void LoopHandlingPass::processCallInst(Instruction *Inst) {
+  //TODO
+  return ;
+}
+
+void LoopHandlingPass::processLoadInst(Instruction *Inst, Instruction *InsertPoint) {
+  LoadInst *LoadI = dyn_cast<LoadInst>(Inst);
+  outs() << "LoadInst: \n" << *LoadI << "\n";
+  Value *LoadOpr = LoadI->getPointerOperand();
+  StringRef VarName = LoadOpr->getName();
+  Type* VarType = LoadI->getPointerOperandType()->getPointerElementType();
+  unsigned TySize = 0;
+  if (VarType->isIntegerTy())
+    TySize = VarType->getIntegerBitWidth();
+  // if (output_cond_loc) {
+    outs() << "LoadOprAddr: " << LoadOpr << "\n";
+    outs() << "VarName: " << VarName << "\n";
+    outs() << "VarType: " << *VarType << "\n";
+    outs() << "Size: " << TySize << "\n";
+    outs() << "Alignment: " << LoadI->getAlignment() << "\n";
+  // }
+  ConstantInt *size = ConstantInt::get(Int32Ty, TySize);
+  IRBuilder<> IRB(InsertPoint);
+  // Value * FormatStrPtr = IRB.CreatePointerCast(
+  //               FormatStrVar, PrintfArg, "formatStr");
+  // IRB.CreateCall(PrintfFn, {FormatStrPtr, LoadOpr, size, size});
+
+  Value * LoadOprPtr = IRB.CreatePointerCast(
+                 LoadOpr, Int8PtrTy, "loadOprPtr");
+  outs() << "LoadOprPtr: " << LoadOprPtr << "\n";
+  outs() << "size : " << size << "\n";
+  CallInst *CallI = IRB.CreateCall(LoadLabelDumpFn, {LoadOprPtr, size});
+  outs() << "CallI: " << *CallI << "\n";
+  outs() << "finish load\n" ;
+
+
+}
+
+u32 LoopHandlingPass::handleFunction(Function *F) {
+  if (!F->getName().startswith(StringRef("__dfsw_"))) {
+    return 0;
+  }
+
+
+  //return Function hash
+  return 0;
+}
+
+bool LoopHandlingPass::runOnLoop(Loop * L, LPPassManager &LPM) {
+  // if (skipLoop(L)){
+  //   outs() << "skipLoop \n ";
+  //   return false;
+  // }
+    
+  // Only visit top-level loops.
+  if (L->getParentLoop()) {
+    outs() << "getParentLoop \n ";
+    return false;
+  }
+
+  // llvm::printLoop(*L, outs()) ;
+  Function &F = *L->getHeader()->getParent();
+  Module &M = *L->getHeader()->getModule();
+  auto &CTX = F.getContext();
+
+  string FuncName = F.getName();
+  if (F.getName().startswith(StringRef("__dfsw_"))) {
+    return false;
+  }
+
+  initVariables(F, M);
+  if (output_cond_loc) 
+    errs() << "FuncName: " << FuncName << "\n";
+  
   // insert a global variable FLAG in the current function
   // This will insert a declaration into F
   std::string FunctionLoopFlagName = std::string(FuncName + "_LoopFlag");
@@ -235,70 +392,60 @@ bool LoopHandlingPass::runOnLoop(Loop * L, LPPassManager &LPM) {
   NewGV->setAlignment(MaybeAlign(1));
   NewGV->setInitializer(llvm::ConstantInt::get(CTX, APInt(8, 0)));
 
-
-  // inject the declaration of printf
-  Type *PrintfArgTy = Int8PtrTy;
-  FunctionType *PrintfTy =
-      FunctionType::get(Int32Ty, PrintfArgTy, true);
-  FunctionCallee Printf = M.getOrInsertFunction("printf", PrintfTy);
-
-  // set attributes
-  Function *PrintfF = dyn_cast<Function>(Printf.getCallee());
-  PrintfF->setDoesNotThrow();
-  PrintfF->addParamAttr(0, Attribute::NoCapture);
-  PrintfF->addParamAttr(0, Attribute::ReadOnly);
-
-  // create & initialize the printf format string
-  Constant *FormatStr = ConstantDataArray::getString(CTX, "Loop hash :%u, \n Instruction hash :%u,\n induction variable value: %d\n");
-  Constant *FormatStrVar =
-      M.getOrInsertGlobal("FormatStr", FormatStr->getType());
-  dyn_cast<GlobalVariable>(FormatStrVar)->setInitializer(FormatStr);
-
   u32 hLoop = getLoopId(L);
+  LoopSet.insert(hLoop);
   ConstantInt *HLoop = ConstantInt::get(Int32Ty, hLoop);
   ConstantInt *NumZero = ConstantInt::get(Int32Ty, 0);
 
-
+  if (output_cond_loc) 
+    errs() << "LOOP HEADER:\n" << L->getHeader();
   
   //Get an IR builder. Sets the insertion point to loop header
-  //outs() << "loop header:\n" << *L.getHeader();
-  
   //Enter Loop : set flag = true;
   ConstantInt *NumOne = ConstantInt::get(Int8Ty, 1);
   IRBuilder<> HeaderBuilder(&*L->getHeader()->getFirstInsertionPt());
   HeaderBuilder.CreateStore(NumOne, FunctionLoopFlag);
-  // Value *FormatStrPtr = HeaderBuilder.CreatePointerCast(
-  //                 FormatStrVar, PrintfArgTy, "formatStr");
-  // HeaderBuilder.CreateCall(Printf, {FormatStrPtr, HLoop, NumZero, NumZero});
-  
+  /*
+  Value * FormatStrPtr = HeaderBuilder.CreatePointerCast(
+                FormatStrVar, PrintfArg, "formatStr");
+  HeaderBuilder.CreateCall(PrintfFn, {FormatStrPtr, HLoop, NumZero, NumZero});
+  */
+
   // get Latches and ExitingBlocks to get backedges and exiting edges
   SmallVector<BasicBlock *, 16> Latches;
   L->getLoopLatches(Latches);
-  // for (auto &LatchI : Latches) {
-  //   outs() << "loop lacth :\n" << *LatchI;
-  // }
+  if (output_cond_loc) {
+    for (auto &LatchI : Latches) {
+      outs() << "loop lacth :\n" << *LatchI;
+    }
+  }
   SmallVector<BasicBlock *, 16> Exitings;
   L->getExitingBlocks(Exitings);
-  // for (auto &ExitingI : Exitings) {
-  //   outs() << "loop exiting :\n" << *ExitingI;
-  // }
+  if (output_cond_loc) {
+    for (auto &ExitingI : Exitings) {
+      outs() << "loop exiting :\n" << *ExitingI;
+    }
+  }
   //backedges and exiting edges
   SmallSet<Instruction *, 32> Backedges;
   for(BasicBlock *BB : Latches) {
     //instrument before jump instruction
     BasicBlock::reverse_iterator i = BB->rbegin();
 
-      if (i != BB->rend()) {
+    if (i != BB->rend()) {
+
       //If the previous instruction of the jump instruction 
       //is a comparison instruction, then instrument before the comparison instruction
       BasicBlock::reverse_iterator i2 = BB->rbegin();
       i2++;
       if (i2 != BB->rend() && isa<CmpInst>(&*i2)) {
-        // outs() << "backedges: \n" << *i2 << "\n";
+        if (output_cond_loc)
+          outs() << "backedges: \n" << *i2 << "\n";
         Backedges.insert(&*i2);
       }
       else {
-        // outs() << "backedges: \n" << *i << "\n";
+        if (output_cond_loc)
+          outs() << "backedges: \n" << *i << "\n";
         Backedges.insert(&*i);
       }
     }
@@ -315,7 +462,8 @@ bool LoopHandlingPass::runOnLoop(Loop * L, LPPassManager &LPM) {
         Exitingedges.insert(&*i2);
       }
       else {
-        // outs() << "exitings: \n" << *i << "\n";
+        if (output_cond_loc)
+          outs() << "exitings: \n" << *i << "\n";
         Exitingedges.insert(&*i);
       }
     }
@@ -327,9 +475,9 @@ bool LoopHandlingPass::runOnLoop(Loop * L, LPPassManager &LPM) {
     ConstantInt *HInst = ConstantInt::get(Int32Ty, hInst);
 
     IRBuilder<> InstBuilder(Inst);
-    Value *FormatStrPtr = InstBuilder.CreatePointerCast(
-                  FormatStrVar, PrintfArgTy, "formatStr");
-    InstBuilder.CreateCall(Printf, {FormatStrPtr, HLoop, HInst, NumZero});
+    // Value *FormatStrPtr = InstBuilder.CreatePointerCast(
+    //               FormatStrVar, PrintfArg, "formatStr");
+    // InstBuilder.CreateCall(PrintfFn, {FormatStrPtr, HLoop, HInst, NumZero});
     // insert dump labels
   }
 
@@ -340,15 +488,33 @@ bool LoopHandlingPass::runOnLoop(Loop * L, LPPassManager &LPM) {
     ConstantInt *HInst = ConstantInt::get(Int32Ty, hInst);
     //get induction variable value
     IRBuilder<> InstBuilder(Inst);
-    Value *FormatStrPtr = InstBuilder.CreatePointerCast(
-                  FormatStrVar, PrintfArgTy, "formatStr");
-    InstBuilder.CreateCall(Printf, {FormatStrPtr, HLoop, HInst, NumZero});
+    // Value *FormatStrPtr = InstBuilder.CreatePointerCast(
+    //               FormatStrVar, PrintfArg, "formatStr");
+    // InstBuilder.CreateCall(PrintfFn, {FormatStrPtr, HLoop, HInst, NumZero});
     //insert dump labels
+  }
+
+  for (BasicBlock *BB : L->getBlocks()) {
+    // 不要记录迭代的那个变量i、j
+    // 记录了可能也无所谓？因为没有taint标签
+    // 尽量不要记录。因为有开销
+    for (auto &Inst : *BB) {
+      // if (isa<CallInst>(&Inst)) {
+      //     visitCallInst(&Inst);
+      // } 
+      // else if (isa<InvokeInst>(&Inst)) {
+      //     visitInvokeInst(&Inst);
+      // } 
+      // else 
+      if (isa<LoadInst>(&Inst)) {
+          visitLoadInst(&Inst);
+      }
+
+    }
   }
 
   
   return true;
-  // return Instrumented;
 
 } //runOnLoop end
 
