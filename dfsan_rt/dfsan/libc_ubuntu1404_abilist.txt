@@ -1765,7 +1765,6 @@ fun:fputwc_unlocked=uninstrumented
 fun:fputws=uninstrumented
 fun:fputws_unlocked=uninstrumented
 fun:fread=uninstrumented
-fun:read=uninstrumented
 fun:fread_unlocked=uninstrumented
 fun:free=uninstrumented
 fun:freeaddrinfo=uninstrumented
