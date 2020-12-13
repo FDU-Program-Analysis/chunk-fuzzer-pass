@@ -132,6 +132,20 @@ __dfsw_fopen64(const char *filename, const char *mode, dfsan_label fn_label,
   return fd;
 }
 
+__attribute__((visibility("default"))) FILE *
+__dfsw_fdopen(int fildes, const char * mode, dfsan_label fd_label,
+               dfsan_label mode_label, dfsan_label *ret_label) {
+  FILE *fd = fdopen(fildes, mode);
+
+#ifdef DEBUG_INFO
+  fprintf(stderr, "### fdopen64, fd is : %p, fp is %p \n", fildes, fd);
+  fflush(stderr);
+#endif
+
+  *ret_label = 0;
+  return fd;
+}
+
 __attribute__((visibility("default"))) int
 __dfsw_close(int fd, dfsan_label fd_label, dfsan_label *ret_label) {
 
