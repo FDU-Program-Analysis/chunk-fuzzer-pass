@@ -51,6 +51,7 @@ fun:reallocarray=custom
 fun:open=custom
 fun:fopen=custom
 fun:fopen64=custom
+fun:fdopen=custom
 ## freopen
 
 # close
