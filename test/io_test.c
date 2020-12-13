@@ -227,6 +227,7 @@ void _IO_getc_test(){
 	}
 }
 
+// 使用 ./iotest < file 来进行测试
 void getchar_test(){
 	char ch;
 	char buffer[10];
@@ -334,15 +335,16 @@ void lxstat_test(){
 int main()
 {
 	foo();
- 	// fp = fopen("file", "rb");
-  // open
-  	fd = open("file",O_RDWR);
-  	fp = fdopen(fd, "r");
+  // fopen
+ 	fp = fopen("file", "rb");
+  // open fdopen
+  	// fd = open("file",O_RDWR);
+  	// fp = fdopen(fd, "r");
 	dfsan_label fp_label= dfsan_read_label(fp, sizeof(fp));
 	printf("fp_label: %d\n", fp_label);
 	dfsan_dump_label(fp_label);
 
-	lstat_test();
+	getchar_test();
 
     fclose(fp);
 	return 0;
