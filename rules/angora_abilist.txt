@@ -8,6 +8,12 @@ fun:dfsan_get_label_range=discard
 # Loop-Handler
 fun:__chunk_get_dump_label=uninstrumented
 fun:__chunk_get_dump_label=custom
+fun:__chunk_push_new_obj=uninstrumented
+fun:__chunk_push_new_obj=custom
+fun:__chunk_dump_each_iter=uninstrumented
+fun:__chunk_dump_each_iter=custom
+fun:__chunk_pop_obj=uninstrumented
+fun:__chunk_pop_obj=custom
 
 # Trace-PC
 fun:__angora_trace_cmp=uninstrumented
