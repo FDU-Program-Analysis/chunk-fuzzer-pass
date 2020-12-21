@@ -121,10 +121,18 @@ struct LoopHandlingPass : public LoopPass {
 
   // Constants
   Constant *FormatStrVar;
+  Constant *NumZero;
+  Constant *NumOne;
+  Constant *BoolTrue;
+  Constant *BoolFalse;
 
 
   FunctionCallee PrintfFn;
   FunctionCallee LoadLabelDumpFn;
+  FunctionCallee PushNewObjFn;
+  FunctionCallee DumpEachIterFn;
+  FunctionCallee PopObjFn;
+
 
   LoopHandlingPass() : LoopPass(ID) {}
   bool runOnLoop(Loop * L, LPPassManager &LPM) override ;
@@ -135,6 +143,7 @@ struct LoopHandlingPass : public LoopPass {
   u32 getInstructionId(Instruction *Inst);
   u32 getRandomLoopId();
   u32 getLoopId(Loop *L);
+  u32 getFunctionId(Function *F);
   void setRandomNumSeed(u32 seed);
   void initVariables(Function &F, Module &M);
 
@@ -144,8 +153,6 @@ struct LoopHandlingPass : public LoopPass {
 
   void processCallInst(Instruction *Inst);
   void processLoadInst(Instruction *Cond, Instruction *InsertPoint);
-  u32 handleFunction(Function *F);
-
 };
 
 void LoopHandlingPass::setRandomNumSeed(u32 seed) { RandSeed = seed; }
@@ -168,16 +175,6 @@ u32 LoopHandlingPass::getInstructionId(Instruction *Inst) {
   else {
     h = getRandomInstructionId();
   } 
-
-  if (output_cond_loc) {
-    errs() << "[ID] " << h << "\n";
-    errs() << "[INS] " << *Inst << "\n";
-    if (DILocation *Loc = Inst->getDebugLoc()) {
-      errs() << "[LOC] " << cast<DIScope>(Loc->getScope())->getFilename()
-             << ", Ln " << Loc->getLine() << ", Col " << Loc->getColumn()
-             << "\n";
-    }
-  }
   return h;
 }
 
@@ -204,8 +201,12 @@ u32 LoopHandlingPass::getLoopId(Loop *L) {
   return h;
 }
 
-std::set<u32> LoopSet;
-std::set<u32> FuncSet;
+u32 LoopHandlingPass::getFunctionId(Function *F) {
+  return hashName(F->getName());
+}
+
+std::set<u32> InstrumentedLoopSet;
+std::set<u32> InstrumentedFuncSet;
 
 void LoopHandlingPass::initVariables(Function &F, Module &M) {
   auto &CTX = F.getContext();
@@ -224,6 +225,13 @@ void LoopHandlingPass::initVariables(Function &F, Module &M) {
   Int8PtrTy = PointerType::getUnqual(Int8Ty);
   Int32PtrTy = PointerType::getUnqual(Int32Ty);
   Int64PtrTy = PointerType::getUnqual(Int64Ty);
+
+  NumZero = ConstantInt::get(Int32Ty, 0);
+  NumOne = ConstantInt::get(Int32Ty, 1);
+  BoolTrue = ConstantInt::get(Int8Ty, 1);
+  BoolFalse = ConstantInt::get(Int8Ty, 0);
+  // BoolTrue = ConstantInt::getTrue(Int8Ty);
+  // BoolFalse = ConstantInt::getFalse(Int8Ty);
 
   // inject the declaration of printf
   PrintfArg = Int8PtrTy;
@@ -254,12 +262,45 @@ void LoopHandlingPass::initVariables(Function &F, Module &M) {
     AttributeList AL;
     AL = AL.addAttribute(CTX, AttributeList::FunctionIndex,
                          Attribute::NoUnwind);
-    // AL = AL.addAttribute(CTX, AttributeList::FunctionIndex,
-    //                      Attribute::NoCapture);
     AL = AL.addAttribute(CTX, AttributeList::FunctionIndex,
                          Attribute::ReadOnly);
     LoadLabelDumpFn = M.getOrInsertFunction("__chunk_get_dump_label", LoadLabelDumpArgsTy, AL);   
   }
+
+  Type *PushNewObjArgs[3] = {Int8Ty,Int32Ty,Int32Ty};
+  FunctionType *PushNewObjArgsTy = FunctionType::get(VoidTy, PushNewObjArgs, false);
+  {
+    AttributeList AL;
+    AL = AL.addAttribute(CTX, AttributeList::FunctionIndex,
+                         Attribute::NoUnwind);
+    AL = AL.addAttribute(CTX, AttributeList::FunctionIndex,
+                         Attribute::ReadOnly);
+    PushNewObjFn = M.getOrInsertFunction("__chunk_push_new_obj", PushNewObjArgsTy, AL);   
+  }
+
+  Type *DumpEachIterArgs[1] = {Int32Ty};
+  FunctionType *DumpEachIterArgsTy = FunctionType::get(VoidTy, DumpEachIterArgs, false);
+  {
+    AttributeList AL;
+    AL = AL.addAttribute(CTX, AttributeList::FunctionIndex,
+                         Attribute::NoUnwind);
+    AL = AL.addAttribute(CTX, AttributeList::FunctionIndex,
+                         Attribute::ReadOnly);
+    DumpEachIterFn = M.getOrInsertFunction("__chunk_dump_each_iter", DumpEachIterArgsTy, AL);   
+  }
+
+  Type *PopObjArgs[1] = {Int32Ty};
+  FunctionType *PopObjArgsTy = FunctionType::get(VoidTy, PopObjArgs, false);
+  {
+    AttributeList AL;
+    AL = AL.addAttribute(CTX, AttributeList::FunctionIndex,
+                         Attribute::NoUnwind);
+    AL = AL.addAttribute(CTX, AttributeList::FunctionIndex,
+                         Attribute::ReadOnly);
+    PopObjFn = M.getOrInsertFunction("__chunk_pop_obj", PopObjArgsTy, AL);   
+  }
+
+
 }
 
 void LoopHandlingPass::visitCallInst(Instruction *Inst) {
@@ -268,14 +309,6 @@ void LoopHandlingPass::visitCallInst(Instruction *Inst) {
   Function *Callee = Caller->getCalledFunction();
 
   if (!Callee || Callee->isIntrinsic() || isa<InlineAsm>(Caller->getCalledValue())) {
-    return;
-  }
-
-  // remove inserted "unfold" functions
-  if (!Callee->getName().compare(StringRef("__unfold_branch_fn"))) {
-    if (Caller->use_empty()) {
-      Caller->eraseFromParent();
-    }
     return;
   }
 
@@ -307,213 +340,131 @@ void LoopHandlingPass::visitLoadInst(Instruction *Inst) {
 }
 
 void LoopHandlingPass::processCallInst(Instruction *Inst) {
-  //TODO
+  CallInst *Caller = dyn_cast<CallInst>(Inst);
+  Function *Func = Caller->getCalledFunction();
+  u32 hFunc = getFunctionId(Func);
+  if (InstrumentedFuncSet.find(hFunc) != InstrumentedFuncSet.end()) 
+    return;
+  else 
+    InstrumentedFuncSet.insert(hFunc);
+
+  string FuncName = Func->getName();
+  if (Func->getName().startswith(StringRef("__dfsw_"))) {
+    return;
+  }
+  if (Func->isDeclaration()) {
+    return;
+  }
+  for (auto &BB : *Func) {
+    for (auto &Inst : BB) {
+      if (isa<CallInst>(&Inst)) 
+          visitCallInst(&Inst);
+      else if (isa<InvokeInst>(&Inst)) 
+          visitInvokeInst(&Inst);
+      else if (isa<LoadInst>(&Inst)) 
+          visitLoadInst(&Inst);
+    }
+  }
   return ;
 }
 
 void LoopHandlingPass::processLoadInst(Instruction *Inst, Instruction *InsertPoint) {
   LoadInst *LoadI = dyn_cast<LoadInst>(Inst);
-  outs() << "LoadInst: \n" << *LoadI << "\n";
   Value *LoadOpr = LoadI->getPointerOperand();
   StringRef VarName = LoadOpr->getName();
   Type* VarType = LoadI->getPointerOperandType()->getPointerElementType();
   unsigned TySize = 0;
   if (VarType->isIntegerTy())
     TySize = VarType->getIntegerBitWidth();
-  // if (output_cond_loc) {
-    outs() << "LoadOprAddr: " << LoadOpr << "\n";
-    outs() << "VarName: " << VarName << "\n";
-    outs() << "VarType: " << *VarType << "\n";
-    outs() << "Size: " << TySize << "\n";
-    outs() << "Alignment: " << LoadI->getAlignment() << "\n";
-  // }
   ConstantInt *size = ConstantInt::get(Int32Ty, TySize);
-  IRBuilder<> IRB(InsertPoint);
-  // Value * FormatStrPtr = IRB.CreatePointerCast(
-  //               FormatStrVar, PrintfArg, "formatStr");
-  // IRB.CreateCall(PrintfFn, {FormatStrPtr, LoadOpr, size, size});
 
+  IRBuilder<> IRB(InsertPoint);
   Value * LoadOprPtr = IRB.CreatePointerCast(
                  LoadOpr, Int8PtrTy, "loadOprPtr");
-  outs() << "LoadOprPtr: " << LoadOprPtr << "\n";
-  outs() << "size : " << size << "\n";
   CallInst *CallI = IRB.CreateCall(LoadLabelDumpFn, {LoadOprPtr, size});
-  outs() << "CallI: " << *CallI << "\n";
-  outs() << "finish load\n" ;
-
-
 }
 
-u32 LoopHandlingPass::handleFunction(Function *F) {
-  if (!F->getName().startswith(StringRef("__dfsw_"))) {
-    return 0;
-  }
 
-
-  //return Function hash
-  return 0;
-}
 
 bool LoopHandlingPass::runOnLoop(Loop * L, LPPassManager &LPM) {
-  // if (skipLoop(L)){
-  //   outs() << "skipLoop \n ";
-  //   return false;
-  // }
-    
-  // Only visit top-level loops.
+  bool isChildLoop = false;
+  bool isInstrumented = false;
   if (L->getParentLoop()) {
     outs() << "getParentLoop \n ";
-    return false;
+    isChildLoop = true;
   }
 
-  // llvm::printLoop(*L, outs()) ;
   Function &F = *L->getHeader()->getParent();
   Module &M = *L->getHeader()->getModule();
   auto &CTX = F.getContext();
+  initVariables(F, M);
 
-  string FuncName = F.getName();
-  if (F.getName().startswith(StringRef("__dfsw_"))) {
+  //check if this loop has been instrumented through runOnLoop
+  u32 hLoop = getLoopId(L);
+  if (InstrumentedLoopSet.find(hLoop) != InstrumentedLoopSet.end()) 
     return false;
+  else InstrumentedLoopSet.insert(hLoop);
+
+  // check if this loop has beed instrumented through processCallInst
+  u32 hFunc = getFunctionId(&F);
+  if (InstrumentedFuncSet.find(hLoop) != InstrumentedFuncSet.end())
+    isInstrumented = true;
+  
+  ConstantInt *HLoop = ConstantInt::get(Int32Ty, hLoop);
+
+  // Instrument LoadInst and CallInst\InvokeInst
+  if (!(isChildLoop || isInstrumented)) {
+    for (BasicBlock *BB : L->getBlocks()) {
+      for (auto &Inst : *BB) {
+        if (isa<CallInst>(&Inst)) 
+            visitCallInst(&Inst);
+        else if (isa<InvokeInst>(&Inst)) 
+            visitInvokeInst(&Inst);
+        else if (isa<LoadInst>(&Inst)) 
+            visitLoadInst(&Inst);
+      }
+    }
   }
 
-  initVariables(F, M);
-  if (output_cond_loc) 
-    errs() << "FuncName: " << FuncName << "\n";
-  
-  // insert a global variable FLAG in the current function
-  // This will insert a declaration into F
-  std::string FunctionLoopFlagName = std::string(FuncName + "_LoopFlag");
-  Constant *FunctionLoopFlag = 
-      M.getOrInsertGlobal(FunctionLoopFlagName, Int8Ty);
+  // Insert a global variable COUNTER in the current function.This will insert a declaration into M
+  char hexTmp[10];
+  sprintf(hexTmp, "%X", hLoop);
+  std::string hLoopStr = hexTmp;
+  std::string LoopCntName = std::string("LoopCnt_" + hLoopStr);
+  Value *LoopCnt = 
+      M.getOrInsertGlobal(LoopCntName, Int32Ty);
   
   // This will change the declaration into definition (and initialise to 0)
-  GlobalVariable *NewGV = M.getNamedGlobal(FunctionLoopFlagName);
-  NewGV->setLinkage(GlobalValue::CommonLinkage);
-  NewGV->setAlignment(MaybeAlign(1));
-  NewGV->setInitializer(llvm::ConstantInt::get(CTX, APInt(8, 0)));
+  GlobalVariable *LoopCntGV = M.getNamedGlobal(LoopCntName);
+  LoopCntGV->setLinkage(GlobalValue::CommonLinkage);
+  // MaybeAlign(bitWidth/8)
+  LoopCntGV->setAlignment(MaybeAlign(4)); 
+  LoopCntGV->setInitializer(NumZero);
 
-  u32 hLoop = getLoopId(L);
-  LoopSet.insert(hLoop);
-  ConstantInt *HLoop = ConstantInt::get(Int32Ty, hLoop);
-  ConstantInt *NumZero = ConstantInt::get(Int32Ty, 0);
-
-  if (output_cond_loc) 
-    errs() << "LOOP HEADER:\n" << L->getHeader();
-  
   //Get an IR builder. Sets the insertion point to loop header
-  //Enter Loop : set flag = true;
-  ConstantInt *NumOne = ConstantInt::get(Int8Ty, 1);
   IRBuilder<> HeaderBuilder(&*L->getHeader()->getFirstInsertionPt());
-  HeaderBuilder.CreateStore(NumOne, FunctionLoopFlag);
-  /*
-  Value * FormatStrPtr = HeaderBuilder.CreatePointerCast(
-                FormatStrVar, PrintfArg, "formatStr");
-  HeaderBuilder.CreateCall(PrintfFn, {FormatStrPtr, HLoop, NumZero, NumZero});
-  */
+  LoadInst *LoadLoopCnt = HeaderBuilder.CreateLoad(LoopCnt);
+  HeaderBuilder.CreateCall(PushNewObjFn,{BoolTrue,  LoadLoopCnt, HLoop});
+  HeaderBuilder.CreateCall(DumpEachIterFn,{LoadLoopCnt});
+  Value *Inc = HeaderBuilder.CreateAdd(LoadLoopCnt, NumOne);
+  HeaderBuilder.CreateStore(Inc, LoopCnt);
 
-  // get Latches and ExitingBlocks to get backedges and exiting edges
-  SmallVector<BasicBlock *, 16> Latches;
-  L->getLoopLatches(Latches);
-  if (output_cond_loc) {
-    for (auto &LatchI : Latches) {
-      outs() << "loop lacth :\n" << *LatchI;
-    }
+  //Set the insertion point to each ExitBlocks
+  SmallVector<BasicBlock *, 16> Exits;
+  L->getExitBlocks(Exits);
+  for (auto &ExitI : Exits) {
+    outs() << "loop exit :\n" << *ExitI;
   }
-  SmallVector<BasicBlock *, 16> Exitings;
-  L->getExitingBlocks(Exitings);
-  if (output_cond_loc) {
-    for (auto &ExitingI : Exitings) {
-      outs() << "loop exiting :\n" << *ExitingI;
-    }
-  }
-  //backedges and exiting edges
-  SmallSet<Instruction *, 32> Backedges;
-  for(BasicBlock *BB : Latches) {
-    //instrument before jump instruction
-    BasicBlock::reverse_iterator i = BB->rbegin();
-
-    if (i != BB->rend()) {
-
-      //If the previous instruction of the jump instruction 
-      //is a comparison instruction, then instrument before the comparison instruction
-      BasicBlock::reverse_iterator i2 = BB->rbegin();
-      i2++;
-      if (i2 != BB->rend() && isa<CmpInst>(&*i2)) {
-        if (output_cond_loc)
-          outs() << "backedges: \n" << *i2 << "\n";
-        Backedges.insert(&*i2);
-      }
-      else {
-        if (output_cond_loc)
-          outs() << "backedges: \n" << *i << "\n";
-        Backedges.insert(&*i);
-      }
-    }
+  for(BasicBlock *BB : Exits) {
+    BasicBlock::iterator i = BB->begin();
+    Instruction* ExitI =  &*i;
+    IRBuilder<> ExitBuilder(ExitI);
+    LoadInst *LoadLoopCnt = ExitBuilder.CreateLoad(LoopCnt);
+    ExitBuilder.CreateCall(DumpEachIterFn,{LoadLoopCnt});
+    ExitBuilder.CreateCall(PopObjFn, {HLoop});
+    ExitBuilder.CreateStore(NumZero, LoopCnt);
   }
 
-  SmallSet<Instruction *, 32> Exitingedges;
-  for(BasicBlock *BB : Exitings) {
-    BasicBlock::reverse_iterator i = BB->rbegin();
-    if (i != BB->rend()) {
-      BasicBlock::reverse_iterator i2 = BB->rbegin();
-      i2++;
-      if (i2 != BB->rend() && isa<CmpInst>(&*i2)) {
-        // outs() << "exitings: \n" << *i2 << "\n";
-        Exitingedges.insert(&*i2);
-      }
-      else {
-        if (output_cond_loc)
-          outs() << "exitings: \n" << *i << "\n";
-        Exitingedges.insert(&*i);
-      }
-    }
-  }
-
-  // instrument and dump chunk info
-  for (Instruction * Inst : Backedges) {
-    u32 hInst = getInstructionId(Inst);
-    ConstantInt *HInst = ConstantInt::get(Int32Ty, hInst);
-
-    IRBuilder<> InstBuilder(Inst);
-    // Value *FormatStrPtr = InstBuilder.CreatePointerCast(
-    //               FormatStrVar, PrintfArg, "formatStr");
-    // InstBuilder.CreateCall(PrintfFn, {FormatStrPtr, HLoop, HInst, NumZero});
-    // insert dump labels
-  }
-
-  //instrument dump chunk info
-  //flag = false
-  for (Instruction * Inst : Exitingedges) {
-    u32 hInst = getInstructionId(Inst);
-    ConstantInt *HInst = ConstantInt::get(Int32Ty, hInst);
-    //get induction variable value
-    IRBuilder<> InstBuilder(Inst);
-    // Value *FormatStrPtr = InstBuilder.CreatePointerCast(
-    //               FormatStrVar, PrintfArg, "formatStr");
-    // InstBuilder.CreateCall(PrintfFn, {FormatStrPtr, HLoop, HInst, NumZero});
-    //insert dump labels
-  }
-
-  for (BasicBlock *BB : L->getBlocks()) {
-    // 不要记录迭代的那个变量i、j
-    // 记录了可能也无所谓？因为没有taint标签
-    // 尽量不要记录。因为有开销
-    for (auto &Inst : *BB) {
-      // if (isa<CallInst>(&Inst)) {
-      //     visitCallInst(&Inst);
-      // } 
-      // else if (isa<InvokeInst>(&Inst)) {
-      //     visitInvokeInst(&Inst);
-      // } 
-      // else 
-      if (isa<LoadInst>(&Inst)) {
-          visitLoadInst(&Inst);
-      }
-
-    }
-  }
-
-  
   return true;
 
 } //runOnLoop end
