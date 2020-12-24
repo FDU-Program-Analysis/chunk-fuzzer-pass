@@ -153,6 +153,13 @@ struct LoopHandlingPass : public LoopPass {
 
   void processCallInst(Instruction *Inst);
   void processLoadInst(Instruction *Cond, Instruction *InsertPoint);
+
+  void getAnalysisUsage(AnalysisUsage &AU) const {
+    AU.addRequired<LoopInfoWrapperPass>();
+    AU.addRequired<DominatorTreeWrapperPass>();
+    AU.addRequired<ScalarEvolutionWrapperPass>();
+    AU.setPreservesAll();
+  }
 };
 
 void LoopHandlingPass::setRandomNumSeed(u32 seed) { RandSeed = seed; }
@@ -181,21 +188,20 @@ u32 LoopHandlingPass::getInstructionId(Instruction *Inst) {
 u32 LoopHandlingPass::getRandomLoopId() { return getRandomNum(); }
 
 u32 LoopHandlingPass::getLoopId(Loop *L) {
-
-  u32 h1 = 0,h2 = 0, h = 0;
-  DILocation *st= L->getStartLoc();
-  DILocation *ed= L->getLocRange().getEnd();;
-  if (st && ed) {
-    u32 stLine = st->getLine();
-    u32 stCol = st->getColumn();
-    h1 = (stCol * 33 + stLine) * 33 + FuncID;
-    u32 edLine = ed->getLine();
-    u32 edCol = ed->getColumn();
-    h2 = (edCol * 33 + edLine) * 33 + FuncID;
-
-    h = (h2 + 0x9e3779b9 + (h1<<6) + (h1>>2)) ^ h1;
+  u32 h = 0;
+  StringRef headerName = L->getName();
+  if (headerName != "<unnamed loop>" ) {
+    h = hashName(headerName);
   }
   else {
+    BasicBlock * header = L->getHeader();
+    BasicBlock::reverse_iterator ri = header->rbegin();
+    if (isa<BranchInst>(&*ri)) {
+      h = getInstructionId(&*ri);
+    }
+  }
+  if (h == 0) {
+    errs() << "get random loop ID\n";
     h = getRandomLoopId();
   }
   return h;
@@ -242,8 +248,6 @@ void LoopHandlingPass::initVariables(Function &F, Module &M) {
     AttributeList AL;
     AL = AL.addAttribute(CTX, AttributeList::FunctionIndex,
                          Attribute::NoUnwind);
-    AL = AL.addAttribute(CTX, AttributeList::FunctionIndex,
-                         Attribute::NoCapture);
     AL = AL.addAttribute(CTX, AttributeList::FunctionIndex,
                          Attribute::ReadOnly);
     PrintfFn = M.getOrInsertFunction("printf", PrintfTy, AL);                     
@@ -343,26 +347,49 @@ void LoopHandlingPass::processCallInst(Instruction *Inst) {
   CallInst *Caller = dyn_cast<CallInst>(Inst);
   Function *Func = Caller->getCalledFunction();
   u32 hFunc = getFunctionId(Func);
+
+  if (Func->getName().startswith(StringRef("__chunk_")) || Func->getName().startswith(StringRef("__dfsw_")) ||Func->getName().startswith(StringRef("asan.module"))) {
+    return;
+  }
+    if (Func->isDeclaration()) {
+    return;
+  }
+  ConstantInt *HFunc = ConstantInt::get(Int32Ty, hFunc);
+  IRBuilder<> CallBuilder(Inst);
+  CallBuilder.CreateCall(PushNewObjFn,{BoolFalse,  NumZero, HFunc});
+  Instruction *InsertPoint = Inst->getNextNode();
+  IRBuilder<> CallBuilder2(InsertPoint);
+  CallBuilder2.CreateCall(PopObjFn, {HFunc});
+
   if (InstrumentedFuncSet.find(hFunc) != InstrumentedFuncSet.end()) 
     return;
   else 
     InstrumentedFuncSet.insert(hFunc);
 
-  string FuncName = Func->getName();
-  if (Func->getName().startswith(StringRef("__dfsw_"))) {
-    return;
-  }
-  if (Func->isDeclaration()) {
-    return;
+  DominatorTree DT(*Func);
+  LoopInfo LI(DT);
+  // LoopInfo &LI = getAnalysis<LoopInfoWrapperPass>(*Func).getLoopInfo();
+  std::set<BasicBlock *> skip_bb_set;
+  for (LoopInfo::iterator LIT = LI.begin(), LEND = LI.end(); LIT != LEND; ++LIT) {
+    Loop *LoopI = *LIT;
+    u32 hLoopI = getLoopId(LoopI);
+    if (InstrumentedLoopSet.find(hLoopI) != InstrumentedLoopSet.end()) {
+      for (BasicBlock *BB : LoopI->getBlocks()) {
+        skip_bb_set.insert(BB);
+      }
+    }
   }
   for (auto &BB : *Func) {
-    for (auto &Inst : BB) {
-      if (isa<CallInst>(&Inst)) 
+    if (skip_bb_set.find(&BB) == skip_bb_set.end()) {
+      for (auto &Inst : BB) {
+        if (isa<CallInst>(&Inst)) 
           visitCallInst(&Inst);
-      else if (isa<InvokeInst>(&Inst)) 
+        else if (isa<InvokeInst>(&Inst)) 
           visitInvokeInst(&Inst);
-      else if (isa<LoadInst>(&Inst)) 
+        else if (isa<LoadInst>(&Inst)) {
           visitLoadInst(&Inst);
+        }
+      }
     }
   }
   return ;
@@ -387,12 +414,7 @@ void LoopHandlingPass::processLoadInst(Instruction *Inst, Instruction *InsertPoi
 
 
 bool LoopHandlingPass::runOnLoop(Loop * L, LPPassManager &LPM) {
-  bool isChildLoop = false;
   bool isInstrumented = false;
-  if (L->getParentLoop()) {
-    outs() << "getParentLoop \n ";
-    isChildLoop = true;
-  }
 
   Function &F = *L->getHeader()->getParent();
   Module &M = *L->getHeader()->getModule();
@@ -413,7 +435,7 @@ bool LoopHandlingPass::runOnLoop(Loop * L, LPPassManager &LPM) {
   ConstantInt *HLoop = ConstantInt::get(Int32Ty, hLoop);
 
   // Instrument LoadInst and CallInst\InvokeInst
-  if (!(isChildLoop || isInstrumented)) {
+  if (!isInstrumented) {
     for (BasicBlock *BB : L->getBlocks()) {
       for (auto &Inst : *BB) {
         if (isa<CallInst>(&Inst)) 
@@ -452,9 +474,6 @@ bool LoopHandlingPass::runOnLoop(Loop * L, LPPassManager &LPM) {
   //Set the insertion point to each ExitBlocks
   SmallVector<BasicBlock *, 16> Exits;
   L->getExitBlocks(Exits);
-  for (auto &ExitI : Exits) {
-    outs() << "loop exit :\n" << *ExitI;
-  }
   for(BasicBlock *BB : Exits) {
     BasicBlock::iterator i = BB->begin();
     Instruction* ExitI =  &*i;
