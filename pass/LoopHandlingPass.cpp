@@ -117,7 +117,7 @@ struct LoopHandlingPass : public LoopPass {
   Type *PrintfArg;
   // Global vars
   // GlobalVariable *AngoraMapPtr;
-
+  Value *FuncPop;
 
   // Constants
   Constant *FormatStrVar;
@@ -142,7 +142,7 @@ struct LoopHandlingPass : public LoopPass {
   u32 getRandomInstructionId();
   u32 getInstructionId(Instruction *Inst);
   u32 getRandomLoopId();
-  u32 getLoopId(Loop *L);
+  u32 getLoopId(Function *F, Loop *L);
   u32 getFunctionId(Function *F);
   void setRandomNumSeed(u32 seed);
   void initVariables(Function &F, Module &M);
@@ -182,16 +182,28 @@ u32 LoopHandlingPass::getInstructionId(Instruction *Inst) {
   else {
     h = getRandomInstructionId();
   } 
+  /*
+    errs() << "[ID] " << h << "\n";
+    errs() << "[INS] " << *Inst << "\n";
+    if (DILocation *Loc = Inst->getDebugLoc()) {
+      errs() << "[LOC] " << cast<DIScope>(Loc->getScope())->getFilename()
+             << ", Ln " << Loc->getLine() << ", Col " << Loc->getColumn()
+             << "\n";
+    }
+  */
   return h;
 }
 
 u32 LoopHandlingPass::getRandomLoopId() { return getRandomNum(); }
 
-u32 LoopHandlingPass::getLoopId(Loop *L) {
+u32 LoopHandlingPass::getLoopId(Function *F, Loop *L) {
   u32 h = 0;
-  StringRef headerName = L->getName();
+  std::string funcName = F->getName();
+  std::string headerName = L->getName();
+  funcName += "$";
+  funcName += headerName;
   if (headerName != "<unnamed loop>" ) {
-    h = hashName(headerName);
+    h = hashName(funcName);
   }
   else {
     BasicBlock * header = L->getHeader();
@@ -218,7 +230,6 @@ void LoopHandlingPass::initVariables(Function &F, Module &M) {
   auto &CTX = F.getContext();
   string FuncName = F.getName();
   FuncID = hashName(FuncName);
-  errs() << "FuncName: " << FuncName << " -- " << FuncID << "\n";
   // srandom(FuncID);
   setRandomNumSeed(FuncID);
   output_cond_loc = !!getenv(OUTPUT_COND_LOC_VAR);
@@ -267,7 +278,7 @@ void LoopHandlingPass::initVariables(Function &F, Module &M) {
     AL = AL.addAttribute(CTX, AttributeList::FunctionIndex,
                          Attribute::NoUnwind);
     AL = AL.addAttribute(CTX, AttributeList::FunctionIndex,
-                         Attribute::ReadOnly);
+                         Attribute::ReadNone);
     LoadLabelDumpFn = M.getOrInsertFunction("__chunk_get_dump_label", LoadLabelDumpArgsTy, AL);   
   }
 
@@ -278,7 +289,7 @@ void LoopHandlingPass::initVariables(Function &F, Module &M) {
     AL = AL.addAttribute(CTX, AttributeList::FunctionIndex,
                          Attribute::NoUnwind);
     AL = AL.addAttribute(CTX, AttributeList::FunctionIndex,
-                         Attribute::ReadOnly);
+                         Attribute::ReadNone);
     PushNewObjFn = M.getOrInsertFunction("__chunk_push_new_obj", PushNewObjArgsTy, AL);   
   }
 
@@ -289,20 +300,29 @@ void LoopHandlingPass::initVariables(Function &F, Module &M) {
     AL = AL.addAttribute(CTX, AttributeList::FunctionIndex,
                          Attribute::NoUnwind);
     AL = AL.addAttribute(CTX, AttributeList::FunctionIndex,
-                         Attribute::ReadOnly);
+                         Attribute::ReadNone);
     DumpEachIterFn = M.getOrInsertFunction("__chunk_dump_each_iter", DumpEachIterArgsTy, AL);   
   }
 
   Type *PopObjArgs[1] = {Int32Ty};
-  FunctionType *PopObjArgsTy = FunctionType::get(VoidTy, PopObjArgs, false);
+  FunctionType *PopObjArgsTy = FunctionType::get(Int8Ty, PopObjArgs, false);
   {
     AttributeList AL;
     AL = AL.addAttribute(CTX, AttributeList::FunctionIndex,
                          Attribute::NoUnwind);
     AL = AL.addAttribute(CTX, AttributeList::FunctionIndex,
-                         Attribute::ReadOnly);
+                         Attribute::ReadNone);
     PopObjFn = M.getOrInsertFunction("__chunk_pop_obj", PopObjArgsTy, AL);   
   }
+
+  FuncPop = M.getOrInsertGlobal("FuncPop", Int8Ty);
+  
+  // This will change the declaration into definition (and initialise to 0)
+  GlobalVariable *FuncPopGV = M.getNamedGlobal("FuncPop");
+  FuncPopGV->setLinkage(GlobalValue::CommonLinkage);
+  // MaybeAlign(bitWidth/8)
+  FuncPopGV->setAlignment(MaybeAlign(1)); 
+  FuncPopGV->setInitializer(BoolFalse);
 
 
 }
@@ -313,6 +333,7 @@ void LoopHandlingPass::visitCallInst(Instruction *Inst) {
   Function *Callee = Caller->getCalledFunction();
 
   if (!Callee || Callee->isIntrinsic() || isa<InlineAsm>(Caller->getCalledValue())) {
+    outs() << "VisitCall, Returned : " << *Inst <<"\n";
     return;
   }
 
@@ -327,6 +348,7 @@ void LoopHandlingPass::visitInvokeInst(Instruction *Inst) {
 
   if (!Callee || Callee->isIntrinsic() ||
       isa<InlineAsm>(Caller->getCalledValue())) {
+        outs() << "VisitCall, Returned : " << *Inst <<"\n";
     return;
   }
 
@@ -336,7 +358,7 @@ void LoopHandlingPass::visitInvokeInst(Instruction *Inst) {
 
 void LoopHandlingPass::visitLoadInst(Instruction *Inst) {
   // instrument after LOAD
-  Instruction *InsertPoint = Inst->getNextNode();
+  Instruction *InsertPoint = Inst->getNextNonDebugInstruction();
   if (!InsertPoint || isa<ConstantInt>(Inst))
     return;
   Constant *Cid = ConstantInt::get(Int32Ty, getInstructionId(Inst));
@@ -347,32 +369,40 @@ void LoopHandlingPass::processCallInst(Instruction *Inst) {
   CallInst *Caller = dyn_cast<CallInst>(Inst);
   Function *Func = Caller->getCalledFunction();
   u32 hFunc = getFunctionId(Func);
-
+  outs() << "FunctionName: " << Func->getName()<< " FunctionHash : " << hFunc << "\n";
   if (Func->getName().startswith(StringRef("__chunk_")) || Func->getName().startswith(StringRef("__dfsw_")) ||Func->getName().startswith(StringRef("asan.module"))) {
+    outs() <<"retrun because name: " << Func->getName() << "\n";
     return;
   }
-    if (Func->isDeclaration()) {
+  if (Func->isDeclaration()) {
+    outs() << "return because isDeclaration\n" <<  Func->getName() << "\n";
     return;
   }
   ConstantInt *HFunc = ConstantInt::get(Int32Ty, hFunc);
-  IRBuilder<> CallBuilder(Inst);
-  CallBuilder.CreateCall(PushNewObjFn,{BoolFalse,  NumZero, HFunc});
-  Instruction *InsertPoint = Inst->getNextNode();
-  IRBuilder<> CallBuilder2(InsertPoint);
-  CallBuilder2.CreateCall(PopObjFn, {HFunc});
+  IRBuilder<> BeforeBuilder(Inst);
+  outs() << "Before Call: " << *Inst << "\n";
+  CallInst *Call1 = BeforeBuilder.CreateCall(PushNewObjFn,{BoolFalse,  NumZero, HFunc});
+  outs() << "CallInst Push: " << *Call1 << "\n";
+  Instruction* AfterCall= Inst->getNextNonDebugInstruction();
+  outs() << "After Call: " << *AfterCall << "\n";
+  IRBuilder<> AfterBuilder(AfterCall);
+  Value *PopObjRet = AfterBuilder.CreateCall(PopObjFn, {HFunc});
+  outs() << "CallInst Pop: " << *PopObjRet << "\n";
+  AfterBuilder.CreateStore(PopObjRet,FuncPop);
+
 
   if (InstrumentedFuncSet.find(hFunc) != InstrumentedFuncSet.end()) 
     return;
   else 
     InstrumentedFuncSet.insert(hFunc);
-
+  outs() << "Instrument CallInst\n";
   DominatorTree DT(*Func);
   LoopInfo LI(DT);
   // LoopInfo &LI = getAnalysis<LoopInfoWrapperPass>(*Func).getLoopInfo();
   std::set<BasicBlock *> skip_bb_set;
   for (LoopInfo::iterator LIT = LI.begin(), LEND = LI.end(); LIT != LEND; ++LIT) {
     Loop *LoopI = *LIT;
-    u32 hLoopI = getLoopId(LoopI);
+    u32 hLoopI = getLoopId(Func,LoopI);
     if (InstrumentedLoopSet.find(hLoopI) != InstrumentedLoopSet.end()) {
       for (BasicBlock *BB : LoopI->getBlocks()) {
         skip_bb_set.insert(BB);
@@ -414,7 +444,16 @@ void LoopHandlingPass::processLoadInst(Instruction *Inst, Instruction *InsertPoi
 
 
 bool LoopHandlingPass::runOnLoop(Loop * L, LPPassManager &LPM) {
+
+  // llvm::printLoop(*L, outs());
+  bool isChildLoop = false;
   bool isInstrumented = false;
+
+
+  if (L->getParentLoop()) {
+    // outs() << "getParentLoop \n ";
+    isChildLoop = true;
+  }
 
   Function &F = *L->getHeader()->getParent();
   Module &M = *L->getHeader()->getModule();
@@ -422,20 +461,24 @@ bool LoopHandlingPass::runOnLoop(Loop * L, LPPassManager &LPM) {
   initVariables(F, M);
 
   //check if this loop has been instrumented through runOnLoop
-  u32 hLoop = getLoopId(L);
-  if (InstrumentedLoopSet.find(hLoop) != InstrumentedLoopSet.end()) 
+  u32 hLoop = getLoopId(&F,L);
+  if (InstrumentedLoopSet.find(hLoop) != InstrumentedLoopSet.end()) {
+    outs() << hLoop << " :Instrumented\n";
     return false;
+  }
   else InstrumentedLoopSet.insert(hLoop);
 
   // check if this loop has beed instrumented through processCallInst
   u32 hFunc = getFunctionId(&F);
-  if (InstrumentedFuncSet.find(hLoop) != InstrumentedFuncSet.end())
+  if (InstrumentedFuncSet.find(hFunc) != InstrumentedFuncSet.end()) {
+    outs() << "Func Instrumented: " <<hFunc << "\n";
     isInstrumented = true;
+  }
   
   ConstantInt *HLoop = ConstantInt::get(Int32Ty, hLoop);
 
   // Instrument LoadInst and CallInst\InvokeInst
-  if (!isInstrumented) {
+  if (!(isChildLoop || isInstrumented)) {
     for (BasicBlock *BB : L->getBlocks()) {
       for (auto &Inst : *BB) {
         if (isa<CallInst>(&Inst)) 
