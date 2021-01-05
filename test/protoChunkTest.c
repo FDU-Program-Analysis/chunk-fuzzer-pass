@@ -23,8 +23,6 @@ int first_marker() {
       int c = 0, c2 = 0;
       memcpy(&c, cinfo++, 1);
       memcpy(&c2, cinfo++, 1);
-    //   c = *cinfo++;
-    //   c2 = *cinfo++;
       if (c != 0xFF || c2 != (int) M_SOI) {
           printf("ERROR SOI MARKER!\n");
           return 0;
@@ -63,9 +61,11 @@ int get_chunk () {
     cinfo+=2;
     len-=2;
     while (len > 0) {
-        printf("%x ",cinfo++);
-        len--;
+      char c =  *cinfo++;
+      printf("%02x ",c);
+      len--;
     }
+    printf("\n");
     return 1;
 }
 
@@ -111,7 +111,7 @@ int read_markers ()
 int main ()
 {
     FILE *fp;
-	fp = fopen("crafted-jpg", "rb");
+	fp = fopen("crafted-jpg2", "rb");
     if (fp) {
     //size = 55 byte(EOF);
     fread(data, sizeof(char), 55, fp);
