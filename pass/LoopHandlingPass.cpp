@@ -428,18 +428,24 @@ void LoopHandlingPass::processCallInst(Instruction *Inst) {
 
 void LoopHandlingPass::processLoadInst(Instruction *Inst, Instruction *InsertPoint) {
   LoadInst *LoadI = dyn_cast<LoadInst>(Inst);
+  // outs() << *LoadI <<"\n";
   Value *LoadOpr = LoadI->getPointerOperand();
   StringRef VarName = LoadOpr->getName();
   Type* VarType = LoadI->getPointerOperandType()->getPointerElementType();
   unsigned TySize = 0;
   if (VarType->isIntegerTy())
     TySize = VarType->getIntegerBitWidth();
+  TySize = TySize / 8; //byte;
   ConstantInt *size = ConstantInt::get(Int32Ty, TySize);
 
-  IRBuilder<> IRB(InsertPoint);
-  Value * LoadOprPtr = IRB.CreatePointerCast(
-                 LoadOpr, Int8PtrTy, "loadOprPtr");
-  CallInst *CallI = IRB.CreateCall(LoadLabelDumpFn, {LoadOprPtr, size});
+  // outs() << "VarName : " << VarName << "\nVALUE: " << *LoadOpr << "\nsize : " << TySize << "\n";
+  if (TySize != 0) {
+    IRBuilder<> IRB(InsertPoint);
+    Value * LoadOprPtr = IRB.CreatePointerCast(
+                  LoadOpr, Int8PtrTy, "loadOprPtr");
+    CallInst *CallI = IRB.CreateCall(LoadLabelDumpFn, {LoadOprPtr, size});
+  }
+  
 }
 
 
