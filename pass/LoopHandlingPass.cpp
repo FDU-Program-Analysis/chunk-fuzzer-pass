@@ -53,6 +53,7 @@ b
 #include "llvm/Support/CommandLine.h"
 #include "llvm/Transforms/IPO/PassManagerBuilder.h"
 #include "llvm/Transforms/Utils/BasicBlockUtils.h"
+#include "llvm/Transforms/Utils.h"
 #include "llvm/Pass.h"
 #include "llvm/PassAnalysisSupport.h"
 #include "llvm/InitializePasses.h"
@@ -155,6 +156,7 @@ struct LoopHandlingPass : public LoopPass {
   void processLoadInst(Instruction *Cond, Instruction *InsertPoint);
 
   void getAnalysisUsage(AnalysisUsage &AU) const {
+    AU.addRequiredID(LoopSimplifyID);
     AU.addRequired<LoopInfoWrapperPass>();
     AU.addRequired<DominatorTreeWrapperPass>();
     AU.addRequired<ScalarEvolutionWrapperPass>();
@@ -334,7 +336,6 @@ void LoopHandlingPass::visitCallInst(Instruction *Inst) {
   Function *Callee = Caller->getCalledFunction();
 
   if (!Callee || Callee->isIntrinsic() || isa<InlineAsm>(Caller->getCalledValue())) {
-    // outs() << "VisitCall, Returned : " << *Inst <<"\n";
     return;
   }
 
@@ -349,7 +350,6 @@ void LoopHandlingPass::visitInvokeInst(Instruction *Inst) {
 
   if (!Callee || Callee->isIntrinsic() ||
       isa<InlineAsm>(Caller->getCalledValue())) {
-        // outs() << "VisitCall, Returned : " << *Inst <<"\n";
     return;
   }
 
@@ -370,36 +370,30 @@ void LoopHandlingPass::processCallInst(Instruction *Inst) {
   CallInst *Caller = dyn_cast<CallInst>(Inst);
   Function *Func = Caller->getCalledFunction();
   u32 hFunc = getFunctionId(Func);
-  // outs() << "FunctionName: " << Func->getName()<< " FunctionHash : " << hFunc << "\n";
   if (Func->getName().startswith(StringRef("__chunk_")) || Func->getName().startswith(StringRef("__dfsw_")) ||Func->getName().startswith(StringRef("asan.module"))) {
-    // outs() <<"retrun because name: " << Func->getName() << "\n";
     return;
   }
   if (Func->isDeclaration()) {
-    // outs() << "return because isDeclaration\n" <<  Func->getName() << "\n";
     return;
   }
   ConstantInt *HFunc = ConstantInt::get(Int32Ty, hFunc);
   IRBuilder<> BeforeBuilder(Inst);
-  // outs() << "Before Call: " << *Inst << "\n";
   CallInst *Call1 = BeforeBuilder.CreateCall(PushNewObjFn,{BoolFalse,  NumZero, HFunc});
-  // outs() << "CallInst Push: " << *Call1 << "\n";
   Instruction* AfterCall= Inst->getNextNonDebugInstruction();
-  // outs() << "After Call: " << *AfterCall << "\n";
   IRBuilder<> AfterBuilder(AfterCall);
   Value *PopObjRet = AfterBuilder.CreateCall(PopObjFn, {HFunc});
-  // outs() << "CallInst Pop: " << *PopObjRet << "\n";
-  // AfterBuilder.CreateStore(PopObjRet,FuncPop);
 
 
   if (InstrumentedFuncSet.find(hFunc) != InstrumentedFuncSet.end()) 
     return;
-  else 
+  else {
     InstrumentedFuncSet.insert(hFunc);
-  // outs() << "Instrument CallInst\n";
+    char hexTmp[10];
+    sprintf(hexTmp, "%X", hFunc);
+    outs() << hexTmp << " : " <<  Func->getName() << "\n";
+  }
   DominatorTree DT(*Func);
   LoopInfo LI(DT);
-  // LoopInfo &LI = getAnalysis<LoopInfoWrapperPass>(*Func).getLoopInfo();
   std::set<BasicBlock *> skip_bb_set;
   for (LoopInfo::iterator LIT = LI.begin(), LEND = LI.end(); LIT != LEND; ++LIT) {
     Loop *LoopI = *LIT;
@@ -428,7 +422,6 @@ void LoopHandlingPass::processCallInst(Instruction *Inst) {
 
 void LoopHandlingPass::processLoadInst(Instruction *Inst, Instruction *InsertPoint) {
   LoadInst *LoadI = dyn_cast<LoadInst>(Inst);
-  // outs() << *LoadI <<"\n";
   Value *LoadOpr = LoadI->getPointerOperand();
   StringRef VarName = LoadOpr->getName();
   Type* VarType = LoadI->getPointerOperandType()->getPointerElementType();
@@ -438,7 +431,6 @@ void LoopHandlingPass::processLoadInst(Instruction *Inst, Instruction *InsertPoi
   TySize = TySize / 8; //byte;
   ConstantInt *size = ConstantInt::get(Int32Ty, TySize);
 
-  // outs() << "VarName : " << VarName << "\nVALUE: " << *LoadOpr << "\nsize : " << TySize << "\n";
   if (TySize != 0) {
     IRBuilder<> IRB(InsertPoint);
     Value * LoadOprPtr = IRB.CreatePointerCast(
@@ -458,7 +450,6 @@ bool LoopHandlingPass::runOnLoop(Loop * L, LPPassManager &LPM) {
 
 
   if (L->getParentLoop()) {
-    // outs() << "getParentLoop \n ";
     isChildLoop = true;
   }
 
@@ -473,7 +464,13 @@ bool LoopHandlingPass::runOnLoop(Loop * L, LPPassManager &LPM) {
     // outs() << hLoop << " :Instrumented\n";
     return false;
   }
-  else InstrumentedLoopSet.insert(hLoop);
+  else {
+    InstrumentedLoopSet.insert(hLoop);
+    char hexTmp[10];
+    sprintf(hexTmp, "%X", hLoop);
+    outs() << hexTmp << " : " <<  F.getName() << "&" << L->getName() << "\n";
+  }
+  
 
   // check if this loop has beed instrumented through processCallInst
   u32 hFunc = getFunctionId(&F);
@@ -523,10 +520,26 @@ bool LoopHandlingPass::runOnLoop(Loop * L, LPPassManager &LPM) {
 
   //Set the insertion point to each ExitBlocks
   SmallVector<BasicBlock *, 16> Exits;
-  L->getExitBlocks(Exits);
+  L->getUniqueExitBlocks(Exits);
   for(BasicBlock *BB : Exits) {
-    BasicBlock::iterator i = BB->begin();
+    errs() << "\nexit block : \n" << *BB;
+    BasicBlock::reverse_iterator i = BB->rbegin();
     Instruction* ExitI =  &*i;
+    if (BB->size() != 1) {
+      i++;
+      if (i != BB->rend() && isa<CmpInst>(&*i)) {
+        ExitI = &*i;
+      }
+      for (auto &Inst : *BB) {
+        if (isa<CallInst>(&Inst)) 
+          visitCallInst(&Inst);
+        else if (isa<InvokeInst>(&Inst)) 
+          visitInvokeInst(&Inst);
+        else if (isa<LoadInst>(&Inst)) {
+          visitLoadInst(&Inst);
+        }
+      }
+    }
     IRBuilder<> ExitBuilder(ExitI);
     LoadInst *LoadLoopCnt = ExitBuilder.CreateLoad(LoopCnt);
     ExitBuilder.CreateCall(DumpEachIterFn,{LoadLoopCnt});
