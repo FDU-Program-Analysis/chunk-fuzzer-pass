@@ -25,7 +25,6 @@ pub extern "C" fn __dfsw___chunk_get_dump_label(
     _l0: DfsanLabel,
     _l1: DfsanLabel,
 ) {
-    println!("addr: {:p}, size: {:?}", addr, size);
     let mut osl = OS.lock().unwrap();
     if let Some(ref mut os) = *osl {
         os.get_load_label(addr, size);

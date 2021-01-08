@@ -205,12 +205,12 @@ impl ObjectStack {
         if self.objs[self.cur_id].is_loop {
             if self.objs[self.cur_id].cur_iter.is_some() {
                 let mut tmp_iter = self.objs[self.cur_id].cur_iter.as_mut().unwrap();
-                println!("cur_iter elements: {:?}",tmp_iter);
                 loop_handlers::ObjectStack::minimize_list(&mut tmp_iter);
-                println!("cur_iter : {:?}", tmp_iter);
                 self.insert_iter_into_sum();
                 self.objs[self.cur_id].cur_iter.as_mut().unwrap().clear();
-                println!("cur obj: {:?}", self.objs[self.cur_id]);
+                if self.objs[self.cur_id].sum.len() != 0 {
+                    println!("cur obj: {:?}", self.objs[self.cur_id].sum);
+                }
             }
             else {
                 panic!("[ERR]: Loop with wrong structure!! #[ERR]");
