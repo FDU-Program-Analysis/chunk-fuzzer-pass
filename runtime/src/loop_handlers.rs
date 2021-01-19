@@ -49,11 +49,12 @@ pub struct ObjectStack {
     cur_id: usize,
     // hit times for every single byte. Key is TagSeg.begin
     hit: HashMap<u32, u32>,
-    fd: Option<fs::File>,
+    // fd: fs::File,
 }
 
 impl ObjectStack {
     pub fn new() -> Self {
+        
         let fd = match env::var(defs::TRACK_INPUT_VAR) {
             Ok(mut input) => {
                 input = input.replace(" ", "_");
@@ -64,15 +65,18 @@ impl ObjectStack {
                     Err(_) => None,
                 }
             },
-            Err(_) => None,
+            Err(_) => {
+                
+            },
         };
+        
         let mut objs = Vec::with_capacity(STACK_MAX);
         objs.push(ObjectLabels::new(false, 0)); //ROOT
         Self { 
         objs ,
         cur_id: 0,
         hit: HashMap::new(),
-        fd,
+        // fd,
         }
     }
 
@@ -258,6 +262,7 @@ impl ObjectStack {
     //  -> (bool, bool) 
     pub fn dump_cur_iter(
         &mut self,
+        loop_cnt: u32,
     ) {
         if self.objs[self.cur_id].is_loop {
             if self.objs[self.cur_id].cur_iter.is_some() {
@@ -291,6 +296,10 @@ impl ObjectStack {
             else {
                 let mut list = top_obj.sum.clone();
                 self.cur_id -= 1;
+                if self.cur_id <= 3 && list.len() > 0 {
+                    self.objs[self.cur_id].son.push(top_obj);
+                }
+                /*
                 if list.len() > 1 {
                     let item_len = list[0].end-list[0].begin;
                     let mut skip = true;
@@ -301,8 +310,6 @@ impl ObjectStack {
                     }
                     if !skip {
                         self.objs[self.cur_id].son.push(top_obj);
-                        // println!("cur_id: {} ", self.cur_id + 1);
-                        // println!("dump obj: {:?}\n", list);
                         // for key in self.hit.keys().sorted() {
                         //     print!("{}:{}, ", key, self.hit[key]);
                         // }
@@ -311,6 +318,7 @@ impl ObjectStack {
                     
                     // println!("hashmap: {:?}\n", self.hit);
                 }
+                */
                 loop_handlers::ObjectStack::minimize_list(&mut list);
                 self.insert_labels(&mut list);
             }
@@ -318,16 +326,46 @@ impl ObjectStack {
             panic!("[ERR] :STACK EMPTY! #[ERR]");
         }
     }
+
+    pub fn output_format(
+        label: &ObjectLabels,
+        depth: usize,
+    ) {
+        let blank = "  ".repeat(depth);
+        let blank2 = "  ".repeat(depth+1);
+        let start = "\"start\": ";
+        let end = "\"end\": ";
+        let prefix : String = "\"data_".to_string();
+        println!("{}{{", blank);
+        let mut index = 0;
+        for i in &label.sum {
+            let prefix_i = prefix.clone() + &index.to_string();
+            println!("{}{}: {{",blank, prefix_i);
+            println!("{}{}{}",blank2, start, i.begin);
+            println!("{}{}{}",blank2, end, i.end);
+            println!("{}}}",blank);
+            index += 1;
+        }
+
+        println!("{}son: {{",blank2);
+        for i in &label.son {
+            loop_handlers::ObjectStack::output_format(&i,depth+1);
+        }
+        println!("{}}}",blank2);
+        println!("{}}}",blank);
+    }
+
     pub fn fini(
         &mut self,
     ) {
-        println!("[LOG] :OS: {:?} #[LOG]", self.objs);
+        loop_handlers::ObjectStack::minimize_list(&mut self.objs[self.cur_id].sum);
+        loop_handlers::ObjectStack::output_format(&self.objs[self.cur_id], 0);
+        // println!("[LOG] fd: {}", self.fd);
     }
 }
 
 impl Drop for ObjectStack {
     fn drop(&mut self) {
-        println!("DROP!!");
         self.fini();
     }
 }

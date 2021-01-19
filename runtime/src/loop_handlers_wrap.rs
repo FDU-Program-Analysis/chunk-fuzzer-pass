@@ -77,7 +77,7 @@ pub extern "C" fn __dfsw___chunk_dump_each_iter(
         // println!("[LOG]: Loop iter: {} #[LOG]",loop_cnt);
         let mut osl = OS.lock().unwrap();
         if let Some(ref mut os) = *osl {
-            os.dump_cur_iter();
+            os.dump_cur_iter(loop_cnt);
         } 
     } 
 }
