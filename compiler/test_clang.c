@@ -31,10 +31,10 @@
 #include <string.h>
 #include <unistd.h>
 
-static u8 *project_path="/home/jordan/develop/chunk-fuzzer-pass"; 
 static u8 *obj_path;       /* Path to runtime libraries         */
 static u8 **cc_params;     /* Parameters passed to the real CC  */
 static u32 cc_par_cnt = 1; /* Param count, including argv0      */
+static u8 clang_type = CLANG_TRACK_TYPE;
 static u8 is_cxx = 0;
 
 /* Try to find the runtime libraries. If that fails, abort. */
@@ -48,7 +48,6 @@ static void find_obj(u8 *argv0) {
     *slash = 0;
     dir = ck_strdup(argv0);
     *slash = '/';
-
     tmp = alloc_printf("%s/pass/libLoopHandlingPass.so", dir);
     if (!access(tmp, R_OK)) {
       obj_path = dir;
@@ -63,6 +62,24 @@ static void find_obj(u8 *argv0) {
   FATAL("Unable to find 'libLoopHandlingPass.so'");
 }
 
+static void check_type(char *name) {
+  u8 *use_fast = getenv("USE_FAST");
+  u8 *use_dfsan = getenv("USE_DFSAN");
+  u8 *use_track = getenv("USE_TRACK");
+  u8 *use_pin = getenv("USE_PIN");
+  if (use_fast) {
+    clang_type = CLANG_FAST_TYPE;
+  } else if (use_dfsan) {
+    clang_type = CLANG_DFSAN_TYPE;
+  } else if (use_track) {
+    clang_type = CLANG_TRACK_TYPE;
+  } else if (use_pin) {
+    clang_type = CLANG_PIN_TYPE;
+  }
+  if (!strcmp(name, "test-clang++")) {
+    is_cxx = 1;
+  }
+}
 
 static u8 check_if_assembler(u32 argc, const char **argv) {
   /* Check if a file with an assembler extension ("s" or "S") appears in argv */
@@ -88,6 +105,7 @@ static void add_loop_handling_pass() {
 }
 
 static void add_runtime() {
+  if (clang_type != CLANG_FAST_TYPE)
 
     cc_params[cc_par_cnt++] = "-Wl,--whole-archive";
     cc_params[cc_par_cnt++] = alloc_printf("%s/lib/libdfsan_rt-x86_64.a", obj_path);
@@ -97,20 +115,24 @@ static void add_runtime() {
 
     cc_params[cc_par_cnt++] = alloc_printf("%s/lib/libruntime.a", obj_path);
     cc_params[cc_par_cnt++] = alloc_printf("%s/lib/libDFSanIO.a", obj_path);
+    cc_params[cc_par_cnt++] = alloc_printf("%s/lib/libZlibRt.a", obj_path);
     char *rule_obj = getenv(TAINT_CUSTOM_RULE_VAR);
     if (rule_obj) {
       cc_params[cc_par_cnt++] = rule_obj;
     }
-
+  if (clang_type != CLANG_FAST_TYPE) {
+    // cc_params[cc_par_cnt++] = "-pthread";
     if (!is_cxx)
       cc_params[cc_par_cnt++] = "-lstdc++";
     cc_params[cc_par_cnt++] = "-lrt";
+  }
   
   cc_params[cc_par_cnt++] = "-Wl,--no-as-needed";
   cc_params[cc_par_cnt++] = "-Wl,--gc-sections"; // if darwin -Wl, -dead_strip
   cc_params[cc_par_cnt++] = "-ldl";
   cc_params[cc_par_cnt++] = "-lpthread";
   cc_params[cc_par_cnt++] = "-lm";
+  cc_params[cc_par_cnt++] = "-lz";
 }
 
 static void add_dfsan_pass() {
@@ -124,13 +146,15 @@ static void add_dfsan_pass() {
     cc_params[cc_par_cnt++] = "-mllvm";
     cc_params[cc_par_cnt++] =
         alloc_printf("-chunk-dfsan-abilist=%s/rules/dfsan_abilist.txt", obj_path);
+    cc_params[cc_par_cnt++] = "-mllvm";
+    cc_params[cc_par_cnt++] =
+        alloc_printf("-chunk-dfsan-abilist=%s/rules/zlib_abilist.txt", obj_path);
     char *rule_list = getenv(TAINT_RULE_LIST_VAR);
     if (rule_list) {
       cc_params[cc_par_cnt++] = "-mllvm";
       cc_params[cc_par_cnt++] =
           alloc_printf("-chunk-dfsan-abilist=%s", rule_list);
     }
-  
 }
 
 static void edit_params(u32 argc, char **argv) {
@@ -146,6 +170,7 @@ static void edit_params(u32 argc, char **argv) {
     name = argv[0];
   else
     name++;
+  check_type(name);
 
   if (is_cxx) {
     u8 *alt_cxx = getenv("ANGORA_CXX");
@@ -194,17 +219,14 @@ static void edit_params(u32 argc, char **argv) {
   }
 
   if (!maybe_assembler) {
-    add_loop_handling_pass();
-    add_dfsan_pass();
+    if (clang_type == CLANG_TRACK_TYPE) {
+      add_loop_handling_pass();
+    }
+    if (clang_type != CLANG_FAST_TYPE) {
+      add_dfsan_pass();
+    }
+    
   }
-
-  cc_params[cc_par_cnt++] = "-I";
-  cc_params[cc_par_cnt++] = alloc_printf("%s/include", project_path);
-  cc_params[cc_par_cnt++] = "-I";
-  cc_params[cc_par_cnt++] = alloc_printf("%s/dfsan_rt", project_path);
-  cc_params[cc_par_cnt++] = "-I";
-  cc_params[cc_par_cnt++] = alloc_printf("%s/runtime/include", project_path);
-
   cc_params[cc_par_cnt++] = "-pie";
   cc_params[cc_par_cnt++] = "-fpic";
   cc_params[cc_par_cnt++] = "-Qunused-arguments";
@@ -217,7 +239,7 @@ static void edit_params(u32 argc, char **argv) {
       cc_params[cc_par_cnt++] = "-D_FORTIFY_SOURCE=2";
   }
 
-  if (!asan_set) {
+  if (!asan_set && clang_type == CLANG_FAST_TYPE) {
     // We did not test Angora on asan and msan..
     if (getenv("ANGORA_USE_ASAN")) {
 
@@ -254,13 +276,14 @@ static void edit_params(u32 argc, char **argv) {
 
 
   if (is_cxx) {
+    if (clang_type == CLANG_TRACK_TYPE) {
     cc_params[cc_par_cnt++] = alloc_printf("-L%s/lib/libcxx_track/", obj_path);
     cc_params[cc_par_cnt++] = "-stdlib=libc++";
     cc_params[cc_par_cnt++] = "-Wl,--start-group";
     cc_params[cc_par_cnt++] = "-lc++abitrack";
     cc_params[cc_par_cnt++] = "-lc++abi";
     cc_params[cc_par_cnt++] = "-Wl,--end-group";
-    
+    }
   }
 
   if (maybe_linking) {
@@ -269,7 +292,6 @@ static void edit_params(u32 argc, char **argv) {
       cc_params[cc_par_cnt++] = "-x";
       cc_params[cc_par_cnt++] = "none";
     }
-
 
     add_runtime();
 

@@ -1,8 +1,8 @@
 use super::*;
-use crate::{loop_handlers::ObjectStack, tag_set_wrap};
+use crate::{loop_handlers::ObjectStack};
 // use angora_common::{config, tag::TagSeg};
 use lazy_static::lazy_static;
-use std::{slice, sync::Mutex};
+use std::{sync::Mutex};
 
 // Lazy static doesn't have reference count and won't call drop after the program finish.
 // So, we should call drop manually.. see ***_fini.
@@ -25,9 +25,10 @@ pub extern "C" fn __dfsw___chunk_get_dump_label(
     _l0: DfsanLabel,
     _l1: DfsanLabel,
 ) {
-    println!("enter __chunk_get_dump_label");
-    let lb = unsafe { dfsan_read_label(addr, size) };
-    tag_set_wrap::__angora_tag_set_show(lb as usize);
+    let mut osl = OS.lock().unwrap();
+    if let Some(ref mut os) = *osl {
+        os.get_load_label(addr, size);
+    }
 }
 
 #[no_mangle]
@@ -48,16 +49,13 @@ pub extern "C" fn __dfsw___chunk_push_new_obj(
     _l1: DfsanLabel,
     _l2: DfsanLabel,
 ) {
-    println!("is_loop: {}, loop_cnt : {}", is_loop, loop_cnt);
     if is_loop && loop_cnt != 0 {
         return;
     }
     let mut osl = OS.lock().unwrap();
     if let Some(ref mut os) = *osl {
-        os.new_obj(is_loop)
-    } else {
-        return;
-    }
+        os.new_obj(is_loop, loop_hash);
+    } 
 }
 
 #[no_mangle]
@@ -76,14 +74,18 @@ pub extern "C" fn __dfsw___chunk_dump_each_iter(
         return;
     }
     else {
-        println!("Loop iter: {}",loop_cnt);
+        // println!("[LOG]: Loop iter: {} #[LOG]",loop_cnt);
+        let mut osl = OS.lock().unwrap();
+        if let Some(ref mut os) = *osl {
+            os.dump_cur_iter(loop_cnt);
+        } 
     } 
 }
 
 #[no_mangle]
 pub extern "C" fn __chunk_pop_obj(
     _a: u32,
-) {
+)  -> bool {
     panic!("Forbid calling __chunk_pop_obj directly");
 }
 
@@ -91,8 +93,21 @@ pub extern "C" fn __chunk_pop_obj(
 pub extern "C" fn __dfsw___chunk_pop_obj(
     loop_hash: u32,
     _l0: DfsanLabel,
-) {
-    println!("{}",loop_hash);
+) -> bool {
+    let mut osl = OS.lock().unwrap();
+    if let Some(ref mut os) = *osl {
+        os.pop_obj(loop_hash);
+        true
+    } else {
+        println!("POP ERROR!");
+        false
+    }
+}
+
+#[no_mangle]
+pub extern "C" fn __chunk_object_stack_fini() {
+    let mut osl = OS.lock().unwrap();
+    *osl = None;
 }
 
 

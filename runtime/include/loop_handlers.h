@@ -4,8 +4,8 @@
 extern "C" {
 #endif
 
-void __chunk_get_dump_label(void *addr, size_t size);
 
+void __chunk_object_stack_fini();
 
 #ifdef __cplusplus
 }

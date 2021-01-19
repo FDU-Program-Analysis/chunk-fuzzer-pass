@@ -1,12 +1,28 @@
 use serde_derive::{Deserialize, Serialize};
 
-#[derive(Serialize, Deserialize, PartialEq, Eq, Debug, Clone, Copy, Hash)]
+#[derive(Serialize, Deserialize, PartialEq, Eq, Ord, PartialOrd, Debug, Clone, Copy, Hash)]
 #[repr(C)] 
 pub struct TagSeg {
     pub sign: bool,
     pub begin: u32,
     pub end: u32,
 }
+/*
+enum ChunkField {
+    id,
+    length,
+    checksum,
+    payload,
+}
+
+#[derive(Serialize, Deserialize, PartialEq, Eq, Ord, PartialOrd, Debug, Clone, Copy, Hash)]
+#[repr(C)] 
+pub struct TaintSeg {
+    pub begin: u32,
+    pub end: u32,
+    pub field : ChunkField,
+}
+*/
 
 // impl TagSeg {
 //     pub fn slice_from<'a>(&self, v: &'a [u8]) -> &'a [u8] {

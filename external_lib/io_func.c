@@ -25,10 +25,12 @@
 static int granularity = 1; // byte level
 
 // extern void __angora_track_fini_rs();
+extern void __chunk_object_stack_fini();
 
-// __attribute__((destructor(0))) void __angora_track_fini(void) {
-//   __angora_track_fini_rs();
-// }
+__attribute__((destructor(0))) void __angora_track_fini(void) {
+  // __angora_track_fini_rs();
+  __chunk_object_stack_fini();
+}
 
 #define __angora_get_sp_label __angora_get_len_label
 /*
@@ -92,6 +94,14 @@ __dfsw_open(const char *path, int oflags, dfsan_label path_label,
 //  if (fd >= 0 && IS_FUZZING_FILE(path)) {
 //    add_fuzzing_fd(fd);
 //  }
+  // char *strEnv = "";
+  // strEnv = getenv("CHUNK_CURRENT_INPUT_FILE");
+  // if ((NULL == strEnv) || (strlen(strEnv) == 0)) {
+  setenv("CHUNK_CURRENT_INPUT_FILE", path, 1);
+  // }
+  // else {
+  //   printf("PLEASE unset CHUNK_CURRENT_INPUT_FILE\n");
+  // }
 
   *ret_label = 0;
   return fd;
@@ -110,6 +120,14 @@ __dfsw_fopen(const char *filename, const char *mode, dfsan_label fn_label,
 //  if (fd && IS_FUZZING_FILE(filename)) {
 //    add_fuzzing_ffd(fd);
 //  }
+  // char *strEnv = "";
+  // strEnv = getenv("CHUNK_CURRENT_INPUT_FILE");
+  // if ((NULL == strEnv) || (strlen(strEnv) == 0)) {
+  setenv("CHUNK_CURRENT_INPUT_FILE", filename, 1);
+  // }
+  // else {
+  //   printf("PLEASE unset CHUNK_CURRENT_INPUT_FILE\n");
+  // }
 
   *ret_label = 0;
   return fd;
