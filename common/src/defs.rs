@@ -4,6 +4,7 @@ pub static DISABLE_CPU_BINDING_VAR: &str = "ANGORA_DISABLE_CPU_BINDING";
 pub static ANGORA_BIN_DIR: &str = "ANGORA_BIN_DIR";
 
 // executor.rs
+pub static TRACK_INPUT_VAR: &str = "CHUNK_CURRENT_INPUT_FILE";
 pub static TRACK_OUTPUT_VAR: &str = "ANGORA_TRACK_OUTPUT";
 pub static COND_STMT_ENV_VAR: &str = "ANGORA_COND_STMT_SHM_ID";
 pub static BRANCHES_SHM_ENV_VAR: &str = "ANGORA_BRANCHES_SHM_ID";

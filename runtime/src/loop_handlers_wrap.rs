@@ -104,5 +104,11 @@ pub extern "C" fn __dfsw___chunk_pop_obj(
     }
 }
 
+#[no_mangle]
+pub extern "C" fn __chunk_object_stack_fini() {
+    let mut osl = OS.lock().unwrap();
+    *osl = None;
+}
+
 
 

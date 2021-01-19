@@ -1,8 +1,8 @@
 use super::*;
-use angora_common::tag::TagSeg;
+use angora_common::{tag::TagSeg, defs};
+// use itertools::Itertools;
 use crate::{tag_set_wrap};
-use std::{cmp};
-use std::collections::HashMap;
+use std::{collections::HashMap, env, fs, io, cmp, path::Path};
 
 const STACK_MAX: usize = 100000;
 
@@ -15,6 +15,8 @@ pub struct ObjectLabels {
     non_overlap: bool,
     cur_iter: Option<Vec<TagSeg>>,
     sum: Vec<TagSeg>,
+    constraints: Vec<TagSeg>,
+    son: Vec<ObjectLabels>,
 }
 
 
@@ -35,27 +37,42 @@ impl ObjectLabels {
             continuity: true,
             non_overlap: true,
             sum: vec![],
+            constraints: vec![],
+            son: vec![],
         }
     }
 }
 
-// stack, pop, push
 #[derive(Debug)]
 pub struct ObjectStack {
     objs: Vec<ObjectLabels>,
     cur_id: usize,
     // hit times for every single byte. Key is TagSeg.begin
     hit: HashMap<u32, u32>,
+    fd: Option<fs::File>,
 }
 
 impl ObjectStack {
     pub fn new() -> Self {
+        let fd = match env::var(defs::TRACK_INPUT_VAR) {
+            Ok(mut input) => {
+                input = input.replace(" ", "_");
+                input = input.replace(".", "__");
+                input.push_str(".json");
+                match fs::File::create(&input) {
+                    Ok(f) => Some(f),
+                    Err(_) => None,
+                }
+            },
+            Err(_) => None,
+        };
         let mut objs = Vec::with_capacity(STACK_MAX);
         objs.push(ObjectLabels::new(false, 0)); //ROOT
         Self { 
         objs ,
         cur_id: 0,
         hit: HashMap::new(),
+        fd,
         }
     }
 
@@ -69,7 +86,6 @@ impl ObjectStack {
         if len < STACK_MAX {
             self.objs.push(ObjectLabels::new(is_loop, hash));
             self.cur_id += 1;
-            // println!("[LOG]: is_loop: {} ,hash : {:x}, cur_id: {} #[LOG]", is_loop, hash, self.cur_id);
             return;
         }
         else {
@@ -148,8 +164,20 @@ impl ObjectStack {
         }
         list.clear();
         list.append(&mut new_list);
+        loop_handlers::ObjectStack::minimize_list(&mut ret);
         ret
     }
+
+    pub fn insert_constraints(
+        &mut self,
+        list : &mut Vec<TagSeg>,
+    ) {
+        list.sort_by(|a, b| a.begin.cmp(&b.begin));
+        list.dedup();
+        self.objs[self.cur_id].constraints.append(list);
+        self.objs[self.cur_id].constraints.dedup();
+    }
+
 
     // 单次load不判断连续和互斥，只在pop和迭代的时候判断
     pub fn get_load_label(
@@ -167,7 +195,8 @@ impl ObjectStack {
             return;
         }
         let mut list = tag_set_wrap::tag_set_find(lb as usize);
-        let mut constraint = self.access_time(&mut list);
+        let mut constraints = self.access_time(&mut list);
+        self.insert_constraints(&mut constraints);
 
         loop_handlers::ObjectStack::minimize_list(&mut list);
         self.insert_labels(&mut list);
@@ -184,7 +213,7 @@ impl ObjectStack {
                 panic!("[ERR]: Loop object doesn't have cur_iter");
             }
             else {
-                let mut tmp_iter = self.objs[self.cur_id].cur_iter.as_mut().unwrap();
+                let tmp_iter = self.objs[self.cur_id].cur_iter.as_mut().unwrap();
                 for i in list {
                     if tmp_iter.contains(i) {
                         continue;
@@ -233,9 +262,6 @@ impl ObjectStack {
         if self.objs[self.cur_id].is_loop {
             if self.objs[self.cur_id].cur_iter.is_some() {
                 let mut tmp_iter = self.objs[self.cur_id].cur_iter.as_mut().unwrap();
-                if tmp_iter.len() != 0 {
-                    println!("cur iter: {:?}", tmp_iter);
-                }
                 loop_handlers::ObjectStack::minimize_list(&mut tmp_iter);
                 self.insert_iter_into_sum();
                 self.objs[self.cur_id].cur_iter.as_mut().unwrap().clear();
@@ -250,66 +276,64 @@ impl ObjectStack {
 
     }
 
-
-
-    
-
-    /*
-    //将list里的label加到self.objs[cur_id].sum里面，并最小化sum
-    //不做list的clear
-    //satisfy=true：list 与当前sum的内容无重叠、断开
-    pub fn summarize(
-        &mut self,
-        cur_id: usize,
-        list : &mut Vec<TagSeg>,
-        satisfy: &mut bool,
-    ) -> (bool, bool) {
-        *satisfy &= self.objs[cur_id].satisfy;
-        //TODO 判断无重叠
-
-        self.objs[cur_id].sum.append(list);
-        self.minimize(&mut self.objs[cur_id].sum, &mut satisfy);
-
-
-    }
-*/
-    //退出循环、函数返回后，将当前栈顶pop，若hash不匹配说明栈不平衡，出错了
-    //dump当前栈顶的所有数据
+    //退出循环、函数返回后，将当前栈顶pop，minimize, 插入上一层
+    //若hash不匹配说明栈不平衡，出错了
     pub fn pop_obj(
         &mut self,
         hash:u32,
     ) {
-        // println!("[LOG]:pop obj, {:x} #[LOG]",hash);
         let top = self.objs.pop();
         if top.is_some() {
             let top_obj = top.unwrap();
             if top_obj.hash != hash {
-                panic!("[ERR] :pop error! incorrect Hash #[ERR]");
+                panic!("[ERR] :pop error! incorrect Hash {} #[ERR]", top_obj.hash);
             }
             else {
-                let mut list = top_obj.sum;
+                let mut list = top_obj.sum.clone();
                 self.cur_id -= 1;
-                if list.len() != 0 && top_obj.is_loop {
-                    println!("dump obj: {:?}\n", list);
-                    println!("hashmap: {:?}\n", self.hit);
+                if list.len() > 1 {
+                    let item_len = list[0].end-list[0].begin;
+                    let mut skip = true;
+                    for i in list.clone() {
+                        if i.end - i.begin != item_len {
+                            skip = false;
+                        }
+                    }
+                    if !skip {
+                        self.objs[self.cur_id].son.push(top_obj);
+                        // println!("cur_id: {} ", self.cur_id + 1);
+                        // println!("dump obj: {:?}\n", list);
+                        // for key in self.hit.keys().sorted() {
+                        //     print!("{}:{}, ", key, self.hit[key]);
+                        // }
+                        // println!();
+                    }
+                    
+                    // println!("hashmap: {:?}\n", self.hit);
                 }
+                loop_handlers::ObjectStack::minimize_list(&mut list);
                 self.insert_labels(&mut list);
             }
         } else {
             panic!("[ERR] :STACK EMPTY! #[ERR]");
         }
     }
-
-    //dump OS内所有数据
-    pub fn dump_all(
+    pub fn fini(
         &mut self,
     ) {
-        println!("[LOG] :OS: {:?} #[LOG]", self);
+        println!("[LOG] :OS: {:?} #[LOG]", self.objs);
     }
 }
 
-
+impl Drop for ObjectStack {
+    fn drop(&mut self) {
+        println!("DROP!!");
+        self.fini();
+    }
+}
+/*
 // print_type_of(&xxx);
 fn print_type_of<T>(_: &T) {
     println!("{}", std::any::type_name::<T>())
 }
+*/
