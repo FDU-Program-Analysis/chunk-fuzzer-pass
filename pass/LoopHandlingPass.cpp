@@ -388,9 +388,9 @@ void LoopHandlingPass::processCallInst(Instruction *Inst) {
     return;
   else {
     InstrumentedFuncSet.insert(hFunc);
-    char hexTmp[10];
-    sprintf(hexTmp, "%X", hFunc);
-    outs() << hexTmp << " : " <<  Func->getName() << "\n";
+    // char hexTmp[10];
+    // sprintf(hexTmp, "%X", hFunc);
+    // outs() << hexTmp << " : " <<  Func->getName() << "\n";
   }
   DominatorTree DT(*Func);
   LoopInfo LI(DT);
@@ -466,9 +466,9 @@ bool LoopHandlingPass::runOnLoop(Loop * L, LPPassManager &LPM) {
   }
   else {
     InstrumentedLoopSet.insert(hLoop);
-    char hexTmp[10];
-    sprintf(hexTmp, "%X", hLoop);
-    outs() << hexTmp << " : " <<  F.getName() << "&" << L->getName() << "\n";
+    // char hexTmp[10];
+    // sprintf(hexTmp, "%X", hLoop);
+    // outs() << hexTmp << " : " <<  F.getName() << "&" << L->getName() << "\n";
   }
   
 
@@ -500,15 +500,18 @@ bool LoopHandlingPass::runOnLoop(Loop * L, LPPassManager &LPM) {
   sprintf(hexTmp, "%X", hLoop);
   std::string hLoopStr = hexTmp;
   std::string LoopCntName = std::string("LoopCnt_" + hLoopStr);
-  Value *LoopCnt = 
-      M.getOrInsertGlobal(LoopCntName, Int32Ty);
+  // Value *LoopCnt = M.getOrInsertGlobal(LoopCntName, Int32Ty);
   
   // This will change the declaration into definition (and initialise to 0)
-  GlobalVariable *LoopCntGV = M.getNamedGlobal(LoopCntName);
-  LoopCntGV->setLinkage(GlobalValue::CommonLinkage);
-  // MaybeAlign(bitWidth/8)
-  LoopCntGV->setAlignment(MaybeAlign(4)); 
-  LoopCntGV->setInitializer(NumZero);
+  // GlobalVariable *LoopCntGV = M.getNamedGlobal(LoopCntName);
+  // LoopCntGV->setLinkage(GlobalValue::CommonLinkage);
+  // // MaybeAlign(bitWidth/8)
+  // LoopCntGV->setAlignment(MaybeAlign(4)); 
+  // LoopCntGV->setInitializer(NumZero);
+
+  IRBuilder<> FunctionBuilder(&*F.getEntryBlock().getFirstInsertionPt());
+  Value *LoopCnt = FunctionBuilder.CreateAlloca(Int32Ty, 0, LoopCntName);
+  FunctionBuilder.CreateStore(NumZero, LoopCnt);
 
   //Get an IR builder. Sets the insertion point to loop header
   IRBuilder<> HeaderBuilder(&*L->getHeader()->getFirstInsertionPt());
@@ -522,7 +525,7 @@ bool LoopHandlingPass::runOnLoop(Loop * L, LPPassManager &LPM) {
   SmallVector<BasicBlock *, 16> Exits;
   L->getUniqueExitBlocks(Exits);
   for(BasicBlock *BB : Exits) {
-    errs() << "\nexit block : \n" << *BB;
+    // errs() << "\nexit block : \n" << *BB;
     BasicBlock::reverse_iterator i = BB->rbegin();
     Instruction* ExitI =  &*i;
     if (BB->size() != 1) {
