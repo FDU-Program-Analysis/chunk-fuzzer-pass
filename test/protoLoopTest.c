@@ -73,6 +73,17 @@ void func2() {
 }
 
 
+void loop_break(int x, char *buffer) {
+	for (int i = 0; i < x; ++i) {
+		if (buffer[i] == '1')
+			break;
+		if (buffer[i] == '2')
+			break;
+		printf("%d\n", buffer[i]);
+	}
+}
+
+
 int main()
 {
 	FILE *fp;
@@ -82,12 +93,15 @@ int main()
 	int ch = 0;
 	fread(buffer, sizeof(char), 10, fp);
 	ch = buffer[0] - '0';
+	loop_break(5,buffer);
+	/*
 	loop(5, buffer);
 	loop2(ch);
 	loop3(buffer);
 	loop_func(buffer);
 	loop2_func();
 	func2();
+	*/
 	return 0;
 }
 
