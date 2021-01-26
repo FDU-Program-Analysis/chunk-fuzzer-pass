@@ -36,7 +36,7 @@ impl TaintSeg {
     }
 
 }
-*/
+
 
 // impl TagSeg {
 //     pub fn slice_from<'a>(&self, v: &'a [u8]) -> &'a [u8] {
