@@ -7,12 +7,14 @@ pub struct TagSeg {
     pub begin: u32,
     pub end: u32,
 }
-/*
-enum ChunkField {
-    id,
-    length,
-    checksum,
-    payload,
+
+#[derive(Serialize, Deserialize, PartialEq, Eq, Ord, PartialOrd, Debug, Clone, Copy, Hash)]
+pub enum ChunkField {
+    Id,
+    Length,
+    Checksum,
+    Index,
+    Other,
 }
 
 #[derive(Serialize, Deserialize, PartialEq, Eq, Ord, PartialOrd, Debug, Clone, Copy, Hash)]
@@ -22,7 +24,7 @@ pub struct TaintSeg {
     pub end: u32,
     pub field : ChunkField,
 }
-*/
+
 
 // impl TagSeg {
 //     pub fn slice_from<'a>(&self, v: &'a [u8]) -> &'a [u8] {

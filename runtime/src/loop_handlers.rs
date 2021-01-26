@@ -1,21 +1,22 @@
 use super::*;
-use angora_common::{tag::TagSeg, defs};
+use angora_common::{tag::*};
 // use itertools::Itertools;
 use crate::{tag_set_wrap};
-use std::{collections::HashMap, env, fs, io, cmp, path::Path};
+use std::{collections::HashMap, fs::File, io::prelude::*, cmp, path::Path};
+use std::time::{SystemTime, UNIX_EPOCH};
 
 const STACK_MAX: usize = 100000;
 
 // Loop & Function labels. 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct ObjectLabels {
     is_loop: bool,
     hash: u32,
     continuity: bool,
     non_overlap: bool,
-    cur_iter: Option<Vec<TagSeg>>,
-    sum: Vec<TagSeg>,
-    constraints: Vec<TagSeg>,
+    cur_iter: Option<Vec<TaintSeg>>,
+    sum: Vec<TaintSeg>,
+    constraints: Vec<TaintSeg>,
     son: Vec<ObjectLabels>,
 }
 
@@ -47,36 +48,20 @@ impl ObjectLabels {
 pub struct ObjectStack {
     objs: Vec<ObjectLabels>,
     cur_id: usize,
-    // hit times for every single byte. Key is TagSeg.begin
+    // hit times for every single byte. Key is TaintSeg.begin
     hit: HashMap<u32, u32>,
-    // fd: fs::File,
+    file_name: String,
 }
 
 impl ObjectStack {
     pub fn new() -> Self {
-        
-        let fd = match env::var(defs::TRACK_INPUT_VAR) {
-            Ok(mut input) => {
-                input = input.replace(" ", "_");
-                input = input.replace(".", "__");
-                input.push_str(".json");
-                match fs::File::create(&input) {
-                    Ok(f) => Some(f),
-                    Err(_) => None,
-                }
-            },
-            Err(_) => {
-                
-            },
-        };
-        
         let mut objs = Vec::with_capacity(STACK_MAX);
         objs.push(ObjectLabels::new(false, 0)); //ROOT
         Self { 
         objs ,
         cur_id: 0,
         hit: HashMap::new(),
-        // fd,
+        file_name: String::new(),
         }
     }
 
@@ -105,10 +90,24 @@ impl ObjectStack {
         return self.get_num_objs() - 1;
     }
 
-    // 将多个标签的offset整合，如[0,1],[1,2]-->[0,2],不区分sign,全记成true
+    pub fn seg_tag_2_taint_tag(
+        list : &mut Vec<TagSeg>, 
+    )-> Vec<TaintSeg> {
+        let mut ret = vec![];
+        for i in list {
+            ret.push(TaintSeg{
+                begin: i.begin, 
+                end: i.end,
+                field: ChunkField::Other
+            });
+        }
+        ret
+    }
+
+    // [0,1],[1,2]-->[0,2]
     // TODO: return (continuity: bool, non_overlap: bool,)
     pub fn minimize_list(
-        list : &mut Vec<TagSeg>, 
+        list : &mut Vec<TaintSeg>, 
     ) {
         list.sort_by(|a, b| a.begin.cmp(&b.begin));
         let mut cur_begin = 0;
@@ -123,10 +122,10 @@ impl ObjectStack {
             else {
                 // push current tag into new_list
                 if i.begin > cur_end {
-                    new_list.push(TagSeg{
-                        sign: true, 
+                    new_list.push(TaintSeg{
                         begin: cur_begin, 
-                        end: cur_end
+                        end: cur_end,
+                        field: ChunkField::Other
                     });
                     cur_begin = i.begin;
                     cur_end = i.end;
@@ -137,10 +136,10 @@ impl ObjectStack {
             }
         }
         if cur_begin != cur_end {
-            new_list.push(TagSeg{
-                sign: true, 
+            new_list.push(TaintSeg{
                 begin: cur_begin, 
-                end: cur_end
+                end: cur_end,
+                field: ChunkField::Other
             });
         }
         list.clear();
@@ -150,8 +149,8 @@ impl ObjectStack {
 
     pub fn access_time(
         &mut self,
-        list : &mut Vec<TagSeg>,
-    ) -> Vec<TagSeg>{
+        list : &mut Vec<TaintSeg>,
+    ) -> Vec<TaintSeg>{
         // access多次的直接从list里删掉，放到ret里,ret的内容不参与chunk切分，但是是自描述数据
         let mut new_list = vec![];
         let mut ret = vec![];
@@ -174,7 +173,7 @@ impl ObjectStack {
 
     pub fn insert_constraints(
         &mut self,
-        list : &mut Vec<TagSeg>,
+        list : &mut Vec<TaintSeg>,
     ) {
         list.sort_by(|a, b| a.begin.cmp(&b.begin));
         list.dedup();
@@ -198,7 +197,8 @@ impl ObjectStack {
         if lb == 0 {
             return;
         }
-        let mut list = tag_set_wrap::tag_set_find(lb as usize);
+        let mut set_list = tag_set_wrap::tag_set_find(lb as usize);
+        let mut list = loop_handlers::ObjectStack::seg_tag_2_taint_tag(&mut set_list);
         let mut constraints = self.access_time(&mut list);
         self.insert_constraints(&mut constraints);
 
@@ -210,7 +210,7 @@ impl ObjectStack {
     
     pub fn insert_labels(
         &mut self,
-        list :&mut Vec<TagSeg>,
+        list :&mut Vec<TaintSeg>,
     ) {
         if self.objs[self.cur_id].is_loop {
             if self.objs[self.cur_id].cur_iter.is_none() {
@@ -296,29 +296,15 @@ impl ObjectStack {
             else {
                 let mut list = top_obj.sum.clone();
                 self.cur_id -= 1;
-                if self.cur_id <= 3 && list.len() > 0 {
+                // println!("constraints: {:?}", top_obj.constraints);
+                if list.len() == 1 && top_obj.son.len() == 1 && top_obj.son[0].sum.len() == 1 {
+                    // let son = top_obj.son;
+                    self.objs[self.cur_id].son.push(top_obj.son[0].clone());
+                }
+                else if list.len() > 0 {
                     self.objs[self.cur_id].son.push(top_obj);
                 }
-                /*
-                if list.len() > 1 {
-                    let item_len = list[0].end-list[0].begin;
-                    let mut skip = true;
-                    for i in list.clone() {
-                        if i.end - i.begin != item_len {
-                            skip = false;
-                        }
-                    }
-                    if !skip {
-                        self.objs[self.cur_id].son.push(top_obj);
-                        // for key in self.hit.keys().sorted() {
-                        //     print!("{}:{}, ", key, self.hit[key]);
-                        // }
-                        // println!();
-                    }
-                    
-                    // println!("hashmap: {:?}\n", self.hit);
-                }
-                */
+                
                 loop_handlers::ObjectStack::minimize_list(&mut list);
                 self.insert_labels(&mut list);
             }
@@ -328,39 +314,67 @@ impl ObjectStack {
     }
 
     pub fn output_format(
+        s: &mut String,
         label: &ObjectLabels,
         depth: usize,
-    ) {
+    ){
         let blank = "  ".repeat(depth);
         let blank2 = "  ".repeat(depth+1);
         let start = "\"start\": ";
         let end = "\"end\": ";
+        let field = "\"type\": ";
         let prefix : String = "\"data_".to_string();
-        println!("{}{{", blank);
+        s.push_str(&format!("{}{{\n", blank));
         let mut index = 0;
         for i in &label.sum {
             let prefix_i = prefix.clone() + &index.to_string();
-            println!("{}{}: {{",blank, prefix_i);
-            println!("{}{}{}",blank2, start, i.begin);
-            println!("{}{}{}",blank2, end, i.end);
-            println!("{}}}",blank);
+            s.push_str(&format!("{}{}: {{\n",blank, prefix_i));
+            s.push_str(&format!("{}{}{}\n",blank2, start, i.begin));
+            s.push_str(&format!("{}{}{}\n",blank2, end, i.end));
+            s.push_str(&format!("{}{}{:?}\n",blank2, field, i.field));
+            s.push_str(&format!("{}}}\n",blank));
             index += 1;
         }
 
-        println!("{}son: {{",blank2);
+        s.push_str(&format!("{}son: {{\n",blank2));
         for i in &label.son {
-            loop_handlers::ObjectStack::output_format(&i,depth+1);
+            loop_handlers::ObjectStack::output_format(s, &i,depth+1);
         }
-        println!("{}}}",blank2);
-        println!("{}}}",blank);
+        s.push_str(&format!("{}}}\n",blank2));
+        s.push_str(&format!("{}}}\n",blank));
+    }
+
+    pub fn set_input_file_name(
+        &mut self,
+        input_name: &mut String,
+    ){
+        *input_name = input_name.replace(" ", "_");
+        *input_name = input_name.replace(".", "__");
+        input_name.push_str(".json");
+        self.file_name = input_name.to_string();
     }
 
     pub fn fini(
         &mut self,
     ) {
+        let mut s = String::new();
         loop_handlers::ObjectStack::minimize_list(&mut self.objs[self.cur_id].sum);
-        loop_handlers::ObjectStack::output_format(&self.objs[self.cur_id], 0);
-        // println!("[LOG] fd: {}", self.fd);
+        loop_handlers::ObjectStack::output_format(&mut s, &self.objs[self.cur_id], 0);
+        if self.file_name.len() == 0 {
+            let timestamp = {
+                let start = SystemTime::now();
+                let since_the_epoch = start
+                    .duration_since(UNIX_EPOCH)
+                    .expect("Time went backwards");
+                let ms = since_the_epoch.as_secs() as i64 * 1000i64 + (since_the_epoch.subsec_nanos() as f64 / 1_000_000.0) as i64;
+                ms
+            };
+            self.file_name.push_str("logfile_");
+            self.file_name.push_str(&timestamp.to_string());
+            self.file_name.push_str(".json");
+        }
+        let mut fd = File::create(&self.file_name).expect("Unable to create log file");
+        fd.write_all(s.as_bytes()).expect("Unable to write file");
     }
 }
 
@@ -369,9 +383,8 @@ impl Drop for ObjectStack {
         self.fini();
     }
 }
-/*
+
 // print_type_of(&xxx);
 fn print_type_of<T>(_: &T) {
     println!("{}", std::any::type_name::<T>())
 }
-*/

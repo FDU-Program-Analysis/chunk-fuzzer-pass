@@ -26,6 +26,7 @@ static int granularity = 1; // byte level
 
 // extern void __angora_track_fini_rs();
 extern void __chunk_object_stack_fini();
+extern void __chunk_set_input_file_name()
 
 __attribute__((destructor(0))) void __angora_track_fini(void) {
   // __angora_track_fini_rs();
@@ -33,14 +34,14 @@ __attribute__((destructor(0))) void __angora_track_fini(void) {
 }
 
 #define __angora_get_sp_label __angora_get_len_label
-/*
+
 #define is_fuzzing_fd __angora_io_find_fd
 #define is_fuzzing_ffd __angora_io_find_pfile
 #define add_fuzzing_fd __angora_io_add_fd
 #define add_fuzzing_ffd __angora_io_add_pfile
 #define remove_fuzzing_fd __angora_io_remove_fd
 #define remove_fuzzing_ffd __angora_io_remove_pfile
-*/
+#define set_input_file_name __chunk_set_input_file_name
 
 static void assign_taint_labels(void *buf, long offset, size_t size) {
   for (size_t i = 0; i < size; i += granularity) {
@@ -94,14 +95,13 @@ __dfsw_open(const char *path, int oflags, dfsan_label path_label,
 //  if (fd >= 0 && IS_FUZZING_FILE(path)) {
 //    add_fuzzing_fd(fd);
 //  }
-  // char *strEnv = "";
-  // strEnv = getenv("CHUNK_CURRENT_INPUT_FILE");
-  // if ((NULL == strEnv) || (strlen(strEnv) == 0)) {
+  set_input_file_name(path);
+  /*
   setenv("CHUNK_CURRENT_INPUT_FILE", path, 1);
-  // }
-  // else {
-  //   printf("PLEASE unset CHUNK_CURRENT_INPUT_FILE\n");
-  // }
+  char *strEnv = "";
+  strEnv = getenv("CHUNK_CURRENT_INPUT_FILE");
+  printf("CHUNK_CURRENT_INPUT_FILE: %s\n",strEnv);
+  */
 
   *ret_label = 0;
   return fd;
@@ -120,15 +120,13 @@ __dfsw_fopen(const char *filename, const char *mode, dfsan_label fn_label,
 //  if (fd && IS_FUZZING_FILE(filename)) {
 //    add_fuzzing_ffd(fd);
 //  }
-  // char *strEnv = "";
-  // strEnv = getenv("CHUNK_CURRENT_INPUT_FILE");
-  // if ((NULL == strEnv) || (strlen(strEnv) == 0)) {
-  setenv("CHUNK_CURRENT_INPUT_FILE", filename, 1);
-  // }
-  // else {
-  //   printf("PLEASE unset CHUNK_CURRENT_INPUT_FILE\n");
-  // }
-
+  set_input_file_name(filename);
+  /*
+  setenv("CHUNK_CURRENT_INPUT_FILE", path, 1);
+  char *strEnv = "";
+  strEnv = getenv("CHUNK_CURRENT_INPUT_FILE");
+  printf("CHUNK_CURRENT_INPUT_FILE: %s\n",strEnv);
+  */
   *ret_label = 0;
   return fd;
 }

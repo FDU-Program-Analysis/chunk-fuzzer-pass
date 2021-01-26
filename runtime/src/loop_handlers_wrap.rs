@@ -3,6 +3,8 @@ use crate::{loop_handlers::ObjectStack};
 // use angora_common::{config, tag::TagSeg};
 use lazy_static::lazy_static;
 use std::{sync::Mutex};
+use std::ffi::CStr;
+use libc::c_char;
 
 // Lazy static doesn't have reference count and won't call drop after the program finish.
 // So, we should call drop manually.. see ***_fini.
@@ -110,5 +112,13 @@ pub extern "C" fn __chunk_object_stack_fini() {
     *osl = None;
 }
 
-
+pub extern "C" fn __chunk_set_input_file_name(name: *const c_char){
+    let mut osl = OS.lock().unwrap();
+    if let Some(ref mut os) = *osl {
+        let c_str = unsafe { CStr::from_ptr(name)};
+        let str_slice: &str = c_str.to_str().unwrap();
+        let str_buf: &mut String = &mut str_slice.to_owned();
+        os.set_input_file_name(str_buf);
+    } 
+}
 
