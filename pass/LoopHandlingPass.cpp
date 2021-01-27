@@ -153,7 +153,9 @@ struct LoopHandlingPass : public LoopPass {
   void visitLoadInst(Instruction *Inst);
   void visitBranchInst(Instruction *Inst);
   void visitSwitchInst(Instruction *Inst);
+  void visitCmpInst(Instruction *Inst);
 
+  void processCmp(Instruction *Cond, Instruction *InsertPoint);
   void processBoolCmp(Value *Cond, Instruction *InsertPoint);
   void processCallInst(Instruction *Inst);
   void processLoadInst(Instruction *Cond, Instruction *InsertPoint);
@@ -373,7 +375,7 @@ void LoopHandlingPass::visitBranchInst(Instruction *Inst) {
   BranchInst *Br = dyn_cast<BranchInst>(Inst);
   if (Br->isConditional()) {
     Value *Cond = Br->getCondition();
-    outs() << "Branch: " << Cond << "\n";
+    outs() << "Branch: " << Cond << "/" << Cond->getType()->getTypeID() << "\n";
     if (Cond && Cond->getType()->isIntegerTy() && !isa<ConstantInt>(Cond)) {
       if (!isa<CmpInst>(Cond)) {
         // From  and, or, call, phi ....
@@ -400,8 +402,8 @@ void LoopHandlingPass::visitSwitchInst(Instruction *Inst) {
   
   // Constant *Cid = ConstantInt::get(Int32Ty, getInstructionId(Inst));
   IRBuilder<> IRB(Sw);
-  
-  outs() << "Switch: " << Cond << num_bytes << "\n";
+
+  outs() << "Switch: " << Cond << "/" << num_bytes << "\n";
 
   Value *SizeArg = ConstantInt::get(Int32Ty, num_bytes);
   SmallVector<Constant *, 16> ArgList;
@@ -427,19 +429,68 @@ void LoopHandlingPass::visitSwitchInst(Instruction *Inst) {
   */
 }
 
+void LoopHandlingPass::visitCmpInst(Instruction *Inst) {
+  Instruction *InsertPoint = Inst->getNextNode();
+  if (!InsertPoint || isa<ConstantInt>(Inst))
+    return;
+  // Constant *Cid = ConstantInt::get(Int32Ty, getInstructionId(Inst));
+  processCmp(Inst, InsertPoint);
+}
+
+void LoopHandlingPass::processCmp(Instruction *Cond, Instruction *InsertPoint) {
+  CmpInst *Cmp = dyn_cast<CmpInst>(Cond);
+  Value *OpArg[2];
+  OpArg[0] = Cmp->getOperand(0);
+  OpArg[1] = Cmp->getOperand(1);
+  Type *OpType = OpArg[0]->getType();
+  if (!((OpType->isIntegerTy() && OpType->getIntegerBitWidth() <= 64) ||
+        OpType->isFloatTy() || OpType->isDoubleTy() || OpType->isPointerTy())) {
+    processBoolCmp(Cond,InsertPoint);
+    return;
+  }
+  int num_bytes = OpType->getScalarSizeInBits() / 8;
+  if (num_bytes == 0) {
+    if (OpType->isPointerTy()) {
+      num_bytes = 8;
+    } else {
+      return;
+    }
+  }
+
+  Value *SizeArg = ConstantInt::get(Int32Ty, num_bytes);
+  u32 predicate = Cmp->getPredicate();
+  if (ConstantInt *CInt = dyn_cast<ConstantInt>(OpArg[1])) {
+    if (CInt->isNegative()) {
+      predicate |= COND_SIGN_MASK;
+    }
+  }
+  Value *TypeArg = ConstantInt::get(Int32Ty, predicate);
+  outs() << "Compare: " << Cond  << "/" << predicate << "/" << OpArg[0]->getType()->getTypeID() << "/" << OpArg[1]->getType()->getTypeID() << "\n";
+  /*
+  IRBuilder<> IRB(InsertPoint);
+  Value *CondExt = IRB.CreateZExt(Cond, Int32Ty);
+  OpArg[0] = castArgType(IRB, OpArg[0]);
+  OpArg[1] = castArgType(IRB, OpArg[1]);
+  
+  CallInst *ProxyCall =
+      IRB.CreateCall(TraceCmpTT, {Cid, CurCtx, SizeArg, TypeArg, OpArg[0],
+                                    OpArg[1], CondExt});
+  */
+}
+
+
 void LoopHandlingPass::processBoolCmp(Value *Cond, Instruction *InsertPoint) {
   if (!Cond->getType()->isIntegerTy() || Cond->getType()->getIntegerBitWidth() > 32) return;
 
   Value *OpArg[2];
   OpArg[1] = ConstantInt::get(Int64Ty, 1);
 
-  IRBuilder<> IRB(InsertPoint);
-
   Value *SizeArg = ConstantInt::get(Int32Ty, 1);
   Value *TypeArg = ConstantInt::get(Int32Ty, COND_EQ_OP | COND_BOOL_MASK);
-  Value *CondExt = IRB.CreateZExt(Cond, Int32Ty);
 
   /* 
+  IRBuilder<> IRB(InsertPoint);
+  Value *CondExt = IRB.CreateZExt(Cond, Int32Ty);
   OpArg[0] = IRB.CreateZExt(CondExt, Int64Ty);
   CallInst *ProxyCall =
       IRB.CreateCall(TraceCmpTT, {Cid, CurCtx, SizeArg, TypeArg, OpArg[0],
@@ -522,7 +573,6 @@ void LoopHandlingPass::processLoadInst(Instruction *Inst, Instruction *InsertPoi
   }
   
 }
-
 
 
 bool LoopHandlingPass::runOnLoop(Loop * L, LPPassManager &LPM) {
@@ -627,8 +677,9 @@ bool LoopHandlingPass::runOnLoop(Loop * L, LPPassManager &LPM) {
           visitBranchInst(&Inst);
         } else if (isa<SwitchInst>(&Inst)) {
           visitSwitchInst(&Inst);
-        } /*else if (isa<CmpInst>(Inst)) {
-          visitCmpInst(Inst);*/
+        } else if (isa<CmpInst>(&Inst)) {
+          visitCmpInst(&Inst);
+        }
       }
     }
     IRBuilder<> ExitBuilder(ExitI);
@@ -636,7 +687,7 @@ bool LoopHandlingPass::runOnLoop(Loop * L, LPPassManager &LPM) {
     ExitBuilder.CreateCall(DumpEachIterFn,{LoadLoopCnt});
     ExitBuilder.CreateCall(PopObjFn, {HLoop});
     ExitBuilder.CreateStore(NumZero, LoopCnt);
-  }
+    }
 
   return true;
 
