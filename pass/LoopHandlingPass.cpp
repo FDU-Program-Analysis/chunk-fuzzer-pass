@@ -151,7 +151,9 @@ struct LoopHandlingPass : public LoopPass {
   void visitCallInst(Instruction *Inst);
   void visitInvokeInst(Instruction *Inst);
   void visitLoadInst(Instruction *Inst);
+  void visitBranchInst(Instruction *Inst);
 
+  void processBoolCmp(Value *Cond, Instruction *InsertPoint);
   void processCallInst(Instruction *Inst);
   void processLoadInst(Instruction *Cond, Instruction *InsertPoint);
 
@@ -366,6 +368,69 @@ void LoopHandlingPass::visitLoadInst(Instruction *Inst) {
   processLoadInst(Inst, InsertPoint);
 }
 
+void LoopHandlingPass::visitBranchInst(Instruction *Inst) {
+  BranchInst *Br = dyn_cast<BranchInst>(Inst);
+  if (Br->isConditional()) {
+    Value *Cond = Br->getCondition();
+    outs() << "Branch" << Cond << "\n";
+    if (Cond && Cond->getType()->isIntegerTy() && !isa<ConstantInt>(Cond)) {
+      if (!isa<CmpInst>(Cond)) {
+        // From  and, or, call, phi ....
+        // Constant *Cid = ConstantInt::get(Int32Ty, getInstructionId(Inst));
+        processBoolCmp(Cond, Inst);
+      }
+    }
+  }
+}
+
+void LoopHandlingPass::processBoolCmp(Value *Cond, Instruction *InsertPoint) {
+  if (!Cond->getType()->isIntegerTy() || Cond->getType()->getIntegerBitWidth() > 32) return;
+
+  Value *OpArg[2];
+  OpArg[1] = ConstantInt::get(Int64Ty, 1);
+
+  IRBuilder<> IRB(InsertPoint);
+  /* fastmode
+  if (FastMode) {
+    LoadInst *CurCid = IRB.CreateLoad(AngoraCondId);
+    setInsNonSan(CurCid);
+    Value *CmpEq = IRB.CreateICmpEQ(Cid, CurCid);
+    setValueNonSan(CmpEq);
+    BranchInst *BI = cast<BranchInst>(
+        SplitBlockAndInsertIfThen(CmpEq, InsertPoint, false, ColdCallWeights));
+    setInsNonSan(BI);
+    IRBuilder<> ThenB(BI);
+    Value *CondExt = ThenB.CreateZExt(Cond, Int32Ty);
+    setValueNonSan(CondExt);
+    OpArg[0] = ThenB.CreateZExt(CondExt, Int64Ty);
+    setValueNonSan(OpArg[0]);
+    LoadInst *CurCtx = ThenB.CreateLoad(AngoraContext);
+    setInsNonSan(CurCtx);
+    CallInst *ProxyCall =
+        ThenB.CreateCall(TraceCmp, {CondExt, Cid, CurCtx, OpArg[0], OpArg[1]});
+    setInsNonSan(ProxyCall);
+  } else if (TrackMode) { */
+
+    Value *SizeArg = ConstantInt::get(Int32Ty, 1);
+    Value *TypeArg = ConstantInt::get(Int32Ty, COND_EQ_OP | COND_BOOL_MASK);
+    Value *CondExt = IRB.CreateZExt(Cond, Int32Ty);
+
+    /* context
+    setValueNonSan(CondExt);
+    OpArg[0] = IRB.CreateZExt(CondExt, Int64Ty);
+    setValueNonSan(OpArg[0]);
+    LoadInst *CurCtx = IRB.CreateLoad(AngoraContext);
+    setInsNonSan(CurCtx);
+    CallInst *ProxyCall =
+        IRB.CreateCall(TraceCmpTT, {Cid, CurCtx, SizeArg, TypeArg, OpArg[0],
+                                    OpArg[1], CondExt});
+    setInsNonSan(ProxyCall);
+    */
+    
+// }
+}
+
+
 void LoopHandlingPass::processCallInst(Instruction *Inst) {
   CallInst *Caller = dyn_cast<CallInst>(Inst);
   Function *Func = Caller->getCalledFunction();
@@ -445,6 +510,7 @@ void LoopHandlingPass::processLoadInst(Instruction *Inst, Instruction *InsertPoi
 bool LoopHandlingPass::runOnLoop(Loop * L, LPPassManager &LPM) {
 
   // llvm::printLoop(*L, outs());
+  outs() << "starting analyzing\n";
   bool isChildLoop = false;
   bool isInstrumented = false;
 
@@ -534,13 +600,18 @@ bool LoopHandlingPass::runOnLoop(Loop * L, LPPassManager &LPM) {
         ExitI = &*i;
       }
       for (auto &Inst : *BB) {
-        if (isa<CallInst>(&Inst)) 
+        if (isa<CallInst>(&Inst)) {
           visitCallInst(&Inst);
-        else if (isa<InvokeInst>(&Inst)) 
+        }else if (isa<InvokeInst>(&Inst)) {
           visitInvokeInst(&Inst);
-        else if (isa<LoadInst>(&Inst)) {
+        }else if (isa<LoadInst>(&Inst)) {
           visitLoadInst(&Inst);
-        }
+        } else if (isa<BranchInst>(&Inst)) {
+          visitBranchInst(&Inst);
+        } /*else if (isa<SwitchInst>(Inst)) {
+          visitSwitchInst(M, Inst);
+        } else if (isa<CmpInst>(Inst)) {
+          visitCmpInst(Inst);*/
       }
     }
     IRBuilder<> ExitBuilder(ExitI);
