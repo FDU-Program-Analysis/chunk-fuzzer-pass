@@ -373,9 +373,12 @@ void LoopHandlingPass::visitLoadInst(Instruction *Inst) {
 
 void LoopHandlingPass::visitBranchInst(Instruction *Inst) {
   BranchInst *Br = dyn_cast<BranchInst>(Inst);
+
+  outs() << "Branch: " << *Br << "\t" << Br->getOpcode() << "\n";
+
   if (Br->isConditional()) {
     Value *Cond = Br->getCondition();
-    outs() << "Branch: " << Cond << "/" << Cond->getType()->getTypeID() << "\n";
+    outs() << "\t" << Cond->getType()->getTypeID() << "\n";
     if (Cond && Cond->getType()->isIntegerTy() && !isa<ConstantInt>(Cond)) {
       if (!isa<CmpInst>(Cond)) {
         // From  and, or, call, phi ....
@@ -391,6 +394,7 @@ void LoopHandlingPass::visitSwitchInst(Instruction *Inst) {
   SwitchInst *Sw = dyn_cast<SwitchInst>(Inst);
   Value *Cond = Sw->getCondition();
 
+  outs() << "Switch: " << *Sw << "\t" << Sw->getOpcode() << "\n";
   if (!(Cond && Cond->getType()->isIntegerTy() && !isa<ConstantInt>(Cond))) {
     return;
   }
@@ -403,13 +407,11 @@ void LoopHandlingPass::visitSwitchInst(Instruction *Inst) {
   // Constant *Cid = ConstantInt::get(Int32Ty, getInstructionId(Inst));
   IRBuilder<> IRB(Sw);
 
-  outs() << "Switch: " << Cond << "/" << num_bytes << "\n";
-
   Value *SizeArg = ConstantInt::get(Int32Ty, num_bytes);
   SmallVector<Constant *, 16> ArgList;
   for (auto It : Sw->cases()) {
     Constant *C = It.getCaseValue();
-    outs() << C->getType()->getTypeID() << "\n";
+    outs() << "\t" << C->getType()->getTypeID() << "\n";
     if (C->getType()->getScalarSizeInBits() > Int64Ty->getScalarSizeInBits())
       continue;
     ArgList.push_back(ConstantExpr::getCast(CastInst::ZExt, C, Int64Ty));
@@ -439,10 +441,12 @@ void LoopHandlingPass::visitCmpInst(Instruction *Inst) {
 
 void LoopHandlingPass::processCmp(Instruction *Cond, Instruction *InsertPoint) {
   CmpInst *Cmp = dyn_cast<CmpInst>(Cond);
+
   Value *OpArg[2];
   OpArg[0] = Cmp->getOperand(0);
   OpArg[1] = Cmp->getOperand(1);
   Type *OpType = OpArg[0]->getType();
+  outs() << "Compare: " << *Cmp << "\t" << OpType->getTypeID() << "\t" << OpArg[1]->getType()->getTypeID() << "\n";
   if (!((OpType->isIntegerTy() && OpType->getIntegerBitWidth() <= 64) ||
         OpType->isFloatTy() || OpType->isDoubleTy() || OpType->isPointerTy())) {
     processBoolCmp(Cond,InsertPoint);
@@ -465,7 +469,7 @@ void LoopHandlingPass::processCmp(Instruction *Cond, Instruction *InsertPoint) {
     }
   }
   Value *TypeArg = ConstantInt::get(Int32Ty, predicate);
-  outs() << "Compare: " << Cond  << "/" << predicate << "/" << OpArg[0]->getType()->getTypeID() << "/" << OpArg[1]->getType()->getTypeID() << "\n";
+  outs() << "\t" << predicate << "\n" ;
   /*
   IRBuilder<> IRB(InsertPoint);
   Value *CondExt = IRB.CreateZExt(Cond, Int32Ty);
@@ -487,7 +491,7 @@ void LoopHandlingPass::processBoolCmp(Value *Cond, Instruction *InsertPoint) {
 
   Value *SizeArg = ConstantInt::get(Int32Ty, 1);
   Value *TypeArg = ConstantInt::get(Int32Ty, COND_EQ_OP | COND_BOOL_MASK);
-
+  outs() << "\tBoolCmp: " << SizeArg->getValueName() << TypeArg->getValueName() << OpArg[1]->getValueName() << "\n";
   /* 
   IRBuilder<> IRB(InsertPoint);
   Value *CondExt = IRB.CreateZExt(Cond, Int32Ty);
@@ -547,6 +551,12 @@ void LoopHandlingPass::processCallInst(Instruction *Inst) {
           visitInvokeInst(&Inst);
         else if (isa<LoadInst>(&Inst)) {
           visitLoadInst(&Inst);
+        } else if (isa<BranchInst>(&Inst)) {
+          visitBranchInst(&Inst);
+        } else if (isa<SwitchInst>(&Inst)) {
+          visitSwitchInst(&Inst);
+        } else if (isa<CmpInst>(&Inst)) {
+          visitCmpInst(&Inst);
         }
       }
     }
@@ -580,7 +590,6 @@ bool LoopHandlingPass::runOnLoop(Loop * L, LPPassManager &LPM) {
   // llvm::printLoop(*L, outs());
   bool isChildLoop = false;
   bool isInstrumented = false;
-
 
   if (L->getParentLoop()) {
     isChildLoop = true;
@@ -624,6 +633,13 @@ bool LoopHandlingPass::runOnLoop(Loop * L, LPPassManager &LPM) {
             visitInvokeInst(&Inst);
         else if (isa<LoadInst>(&Inst)) 
             visitLoadInst(&Inst);
+        else if (isa<BranchInst>(&Inst)) {
+          visitBranchInst(&Inst);
+        } else if (isa<SwitchInst>(&Inst)) {
+          visitSwitchInst(&Inst);
+        } else if (isa<CmpInst>(&Inst)) {
+          visitCmpInst(&Inst);
+        }
       }
     }
   }
