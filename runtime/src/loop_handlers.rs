@@ -54,7 +54,7 @@ pub struct ObjectStack {
 
 impl ObjectStack {
     pub fn new() -> Self {
-        
+        /*
         let fd = match env::var(defs::TRACK_INPUT_VAR) {
             Ok(mut input) => {
                 input = input.replace(" ", "_");
@@ -69,7 +69,7 @@ impl ObjectStack {
                 
             },
         };
-        
+        */
         let mut objs = Vec::with_capacity(STACK_MAX);
         objs.push(ObjectLabels::new(false, 0)); //ROOT
         Self { 
