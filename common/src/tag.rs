@@ -20,9 +20,11 @@ pub enum ChunkField {
 #[derive(Serialize, Deserialize, PartialEq, Eq, Ord, PartialOrd, Debug, Clone, Copy, Hash)]
 #[repr(C)] 
 pub struct TaintSeg {
+    // pub lb: u32,
     pub begin: u32,
     pub end: u32,
     pub field : ChunkField,
+    // pub constraints: 
 }
 
 

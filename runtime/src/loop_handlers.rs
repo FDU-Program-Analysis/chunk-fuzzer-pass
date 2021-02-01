@@ -12,12 +12,11 @@ const STACK_MAX: usize = 100000;
 pub struct ObjectLabels {
     is_loop: bool,
     hash: u32,
-    continuity: bool,
-    non_overlap: bool,
     cur_iter: Option<Vec<TaintSeg>>,
-    sum: Vec<TaintSeg>,
-    constraints: Vec<TaintSeg>,
-    son: Vec<ObjectLabels>,
+    cur_iter_num: usize, 
+    sum: Vec<Vec<TaintSeg>>,//每次迭代单独记，用迭代次数做索引
+    // constraints: Vec<TaintSeg>,
+    son: Vec<Vec<ObjectLabels>>,
 }
 
 
@@ -35,10 +34,9 @@ impl ObjectLabels {
             is_loop,
             hash,
             cur_iter,
-            continuity: true,
-            non_overlap: true,
+            cur_iter_num: 0,
             sum: vec![],
-            constraints: vec![],
+            // constraints: vec![],
             son: vec![],
         }
     }
@@ -146,6 +144,17 @@ impl ObjectStack {
         list.append(&mut new_list);
     }
 
+    pub fn minimize_sum(
+        list : &mut Vec<Vec<TaintSeg>>, 
+    ) -> Vec<TaintSeg> {
+        let mut new_list = vec![];
+        for i in list {
+            new_list.append(i);
+        }
+        loop_handlers::ObjectStack::minimize_list(&mut new_list);
+        new_list
+    }
+
 
     pub fn access_time(
         &mut self,
@@ -170,7 +179,7 @@ impl ObjectStack {
         loop_handlers::ObjectStack::minimize_list(&mut ret);
         ret
     }
-
+/*
     pub fn insert_constraints(
         &mut self,
         list : &mut Vec<TaintSeg>,
@@ -180,7 +189,7 @@ impl ObjectStack {
         self.objs[self.cur_id].constraints.append(list);
         self.objs[self.cur_id].constraints.dedup();
     }
-
+*/
 
     // 单次load不判断连续和互斥，只在pop和迭代的时候判断
     pub fn get_load_label(
@@ -198,11 +207,21 @@ impl ObjectStack {
             return;
         }
         let mut set_list = tag_set_wrap::tag_set_find(lb as usize);
+        if set_list.len() > 0 {
+            println!("prelist: {:?}", set_list);
+        }
         let mut list = loop_handlers::ObjectStack::seg_tag_2_taint_tag(&mut set_list);
-        let mut constraints = self.access_time(&mut list);
-        self.insert_constraints(&mut constraints);
+        if list.len() > 0 {
+
+        println!("afterlist:{:?}", list);
+        }
+        // let mut constraints = self.access_time(&mut list);
+        // self.insert_constraints(&mut constraints);
 
         loop_handlers::ObjectStack::minimize_list(&mut list);
+        if list.len() > 0 {
+            println!("load: {:?}", list);
+        }
         self.insert_labels(&mut list);
         return;
     }
@@ -229,13 +248,17 @@ impl ObjectStack {
             }
         }
         else {
+            //function没有迭代，全都插在第0项。
+            if self.objs[self.cur_id].sum.len() == 0 {
+                self.objs[self.cur_id].sum.insert(0,vec![]);
+            }
             for i in list {
-                if self.objs[self.cur_id].sum.contains(i) {
+                if self.objs[self.cur_id].sum[0].contains(i) {
                     // field :length
                     continue;
                 }
                 else {
-                    self.objs[self.cur_id].sum.push(*i);
+                    self.objs[self.cur_id].sum[0].push(*i);
                 }
             }
         }
@@ -247,7 +270,10 @@ impl ObjectStack {
         if self.objs[self.cur_id].cur_iter.is_none() {
             panic!("insert_iter_into_sum but cur_iter is none!");
         }
-        let tmp_iter = self.objs[self.cur_id].cur_iter.as_ref().unwrap();
+        let tmp_iter = self.objs[self.cur_id].cur_iter.as_ref().unwrap().clone();
+        let index = self.objs[self.cur_id].cur_iter_num - 1;
+        self.objs[self.cur_id].sum.insert(index, tmp_iter.to_vec());
+        /*
         for i in tmp_iter.clone() {
             if self.objs[self.cur_id].sum.contains(&i) {
                 continue;
@@ -255,10 +281,10 @@ impl ObjectStack {
             else {
                 self.objs[self.cur_id].sum.push(i);
             }
-        }
+        }*/
     }
 
-    // dump当前迭代所有数据，并把cur_iter的数据整合进sum中
+    // dump当前迭代所有数据，并把cur_iter的数据按照loop_cnt作为索引整合进sum中
     //  -> (bool, bool) 
     pub fn dump_cur_iter(
         &mut self,
@@ -268,8 +294,13 @@ impl ObjectStack {
             if self.objs[self.cur_id].cur_iter.is_some() {
                 let mut tmp_iter = self.objs[self.cur_id].cur_iter.as_mut().unwrap();
                 loop_handlers::ObjectStack::minimize_list(&mut tmp_iter);
+                self.objs[self.cur_id].cur_iter_num = loop_cnt as usize;
                 self.insert_iter_into_sum();
                 self.objs[self.cur_id].cur_iter.as_mut().unwrap().clear();
+
+                if self.objs[self.cur_id].sum.len() > 0{
+                println!("dump_cur_iter: {:?}",self.objs[self.cur_id].sum);
+                }
             }
             else {
                 panic!("[ERR]: Loop with wrong structure!! #[ERR]");
@@ -290,13 +321,27 @@ impl ObjectStack {
         let top = self.objs.pop();
         if top.is_some() {
             let top_obj = top.unwrap();
+            if top_obj.sum.len() > 0 {
+
+            println!("pop obj: {:?}", top_obj.sum);
+            }
             if top_obj.hash != hash {
                 panic!("[ERR] :pop error! incorrect Hash {} #[ERR]", top_obj.hash);
             }
             else {
                 let mut list = top_obj.sum.clone();
                 self.cur_id -= 1;
+                let index = self.objs[self.cur_id].cur_iter_num;
+                if self.objs[self.cur_id].son.len() <= index {
+                    let mut empty_num = index+1 - self.objs[self.cur_id].son.len();
+                    while empty_num != 0 {
+                        self.objs[self.cur_id].son.push(vec![]);
+                        empty_num -= 1;
+                    }
+                }
+                self.objs[self.cur_id].son[index].push(top_obj);
                 // println!("constraints: {:?}", top_obj.constraints);
+                /*
                 if list.len() == 1 && top_obj.son.len() == 1 && top_obj.son[0].sum.len() == 1 {
                     // let son = top_obj.son;
                     self.objs[self.cur_id].son.push(top_obj.son[0].clone());
@@ -304,9 +349,9 @@ impl ObjectStack {
                 else if list.len() > 0 {
                     self.objs[self.cur_id].son.push(top_obj);
                 }
-                
-                loop_handlers::ObjectStack::minimize_list(&mut list);
-                self.insert_labels(&mut list);
+                */
+                let mut min_list = loop_handlers::ObjectStack::minimize_sum(&mut list);
+                self.insert_labels(&mut min_list);
             }
         } else {
             panic!("[ERR] :STACK EMPTY! #[ERR]");
@@ -317,40 +362,63 @@ impl ObjectStack {
         s: &mut String,
         label: &ObjectLabels,
         depth: usize,
+        prefix: String,
     ){
         let blank = "  ".repeat(depth);
         let blank2 = "  ".repeat(depth+1);
-        let start = "\"start\": ";
-        let end = "\"end\": ";
-        let field = "\"type\": ";
-        let prefix : String = "\"data_".to_string();
-        s.push_str(&format!("{}{{\n", blank));
-        let mut index = 0;
-        for i in &label.sum {
-            let prefix_i = prefix.clone() + &index.to_string();
-            s.push_str(&format!("{}{}: {{\n",blank, prefix_i));
-            s.push_str(&format!("{}{}{}\n",blank2, start, i.begin));
-            s.push_str(&format!("{}{}{}\n",blank2, end, i.end));
-            s.push_str(&format!("{}{}{:?}\n",blank2, field, i.field));
-            s.push_str(&format!("{}}}\n",blank));
-            index += 1;
+        let start = "start";
+        let end = "end";
+        let field = "type";
+        let str_son = "son";
+        let mut son_flag = false;
+        s.push_str(&format!("{}{}:{{\n", blank, prefix));
+        if label.sum.len() > 1 {
+            son_flag = true;
         }
-
-        s.push_str(&format!("{}son: {{\n",blank2));
+        if son_flag {
+            s.push_str(&format!("{}\"{}\": {{\n",blank, str_son)); 
+        }
+        for i in 0 .. label.sum.len() {
+        // for (&i_sum, &i_son) in &label.sum.iter().zip(&label.son.iter()) {
+            let prefix_i = prefix.clone() + &format!("{:02X}", i);
+            s.push_str(&format!("{}\"{}\": {{\n",blank, &prefix_i));         //"00": {
+            if label.sum[i].len() > 0 {
+                for j_sum in &label.sum[i] {
+                    s.push_str(&format!("{}\"{}\": {},\n",blank2, start, j_sum.begin)); //    "start": 0,
+                    s.push_str(&format!("{}\"{}\": {},\n",blank2, end, j_sum.end));     //    "end": 8,
+                    s.push_str(&format!("{}\"{}\": \"{:?}\",\n",blank2, field, j_sum.field)); //"type": Other
+                }  
+            }
+            //print son
+            if label.son.len() > i && label.son[i].len() != 0 {
+                for j_son in &label.son[i] {
+                    if j_son.sum.len() > 0 {
+                        loop_handlers::ObjectStack::output_format(s, &j_son, depth+1, prefix_i.clone());
+                    }
+                }
+            }
+            s.push_str(&format!("{}}},\n",blank));
+        }
+        if son_flag {
+            s.push_str(&format!("{}}}\n",blank)); 
+        }
+        /*
+        s.push_str(&format!("{}\"son\": {{\n",blank2));
         for i in &label.son {
-            loop_handlers::ObjectStack::output_format(s, &i,depth+1);
+            loop_handlers::ObjectStack::output_format(s, &i, depth+1);
         }
-        s.push_str(&format!("{}}}\n",blank2));
-        s.push_str(&format!("{}}}\n",blank));
+        s.push_str(&format!("{}}},\n",blank2));
+        */
+        s.push_str(&format!("{}}},\n",blank));
     }
 
     pub fn set_input_file_name(
         &mut self,
         input_name: &mut String,
     ){
-        *input_name = input_name.replace(" ", "_");
-        *input_name = input_name.replace(".", "__");
-        input_name.push_str(".json");
+        // *input_name = input_name.replace(" ", "_");
+        // *input_name = input_name.replace(".", "__");
+        // input_name.push_str(".json");
         self.file_name = input_name.to_string();
     }
 
@@ -358,8 +426,7 @@ impl ObjectStack {
         &mut self,
     ) {
         let mut s = String::new();
-        loop_handlers::ObjectStack::minimize_list(&mut self.objs[self.cur_id].sum);
-        loop_handlers::ObjectStack::output_format(&mut s, &self.objs[self.cur_id], 0);
+        loop_handlers::ObjectStack::output_format(&mut s, &self.objs[self.cur_id], 0, String::new());
         if self.file_name.len() == 0 {
             let timestamp = {
                 let start = SystemTime::now();

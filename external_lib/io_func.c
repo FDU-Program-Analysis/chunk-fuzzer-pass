@@ -21,12 +21,13 @@
 #include "./len_label.h"
 #include "./defs.h"
 #include "./dfsan_interface.h"
+#include "./loop_handlers.h"
 
 static int granularity = 1; // byte level
 
 // extern void __angora_track_fini_rs();
 extern void __chunk_object_stack_fini();
-extern void __chunk_set_input_file_name()
+extern void __chunk_set_input_file_name();
 
 __attribute__((destructor(0))) void __angora_track_fini(void) {
   // __angora_track_fini_rs();

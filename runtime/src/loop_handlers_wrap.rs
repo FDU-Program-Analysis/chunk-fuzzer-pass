@@ -76,7 +76,7 @@ pub extern "C" fn __dfsw___chunk_dump_each_iter(
         return;
     }
     else {
-        // println!("[LOG]: Loop iter: {} #[LOG]",loop_cnt);
+        println!("[LOG]: Loop iter: {} #[LOG]",loop_cnt);
         let mut osl = OS.lock().unwrap();
         if let Some(ref mut os) = *osl {
             os.dump_cur_iter(loop_cnt);
@@ -101,8 +101,7 @@ pub extern "C" fn __dfsw___chunk_pop_obj(
         os.pop_obj(loop_hash);
         true
     } else {
-        println!("POP ERROR!");
-        false
+        panic!("POP ERROR!");
     }
 }
 
@@ -112,12 +111,19 @@ pub extern "C" fn __chunk_object_stack_fini() {
     *osl = None;
 }
 
+#[no_mangle]
 pub extern "C" fn __chunk_set_input_file_name(name: *const c_char){
     let mut osl = OS.lock().unwrap();
     if let Some(ref mut os) = *osl {
         let c_str = unsafe { CStr::from_ptr(name)};
-        let str_slice: &str = c_str.to_str().unwrap();
-        let str_buf: &mut String = &mut str_slice.to_owned();
+        let str_: &str = c_str.to_str().unwrap();
+        let v: Vec<&str> = str_.split('/').collect();
+        let str_buf: &mut String = &mut String::new();
+        for i in v {
+            str_buf.push_str(i);
+            str_buf.push_str("_");
+        }
+        str_buf.push_str(".json");
         os.set_input_file_name(str_buf);
     } 
 }
