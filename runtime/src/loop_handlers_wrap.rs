@@ -180,4 +180,58 @@ pub extern "C" fn __dfsw___chunk_trace_switch_tt(
     println!("__chunk_trace_switch_tt : {0},{1},{2},{3} ",size,condition,nums,args);
 }
 
+/*
+#[no_mangle]
+pub extern "C" fn __chunk_trace_fn_tt(
+    _a: u32,
+    _b: u32,
+    _c: u32,
+    _d: *mut i8,
+    _e: *mut i8
+) {
+    panic!("Forbid calling __chunk_trace_fn_tt directly");
+}
 
+#[no_mangle]
+pub extern "C" fn __dfsw___chunk_trace_fn_tt(
+    cmpid: u32,
+    context: u32,
+    size: u32,
+    parg1: *mut i8,
+    parg2: *mut i8,
+    _l0: DfsanLabel,
+    _l1: DfsanLabel,
+    _l2: DfsanLabel,
+    _l3: DfsanLabel,
+    _l4: DfsanLabel,
+) {
+    
+}
+
+#[no_mangle]
+pub extern "C" fn __chunk_trace_exploit_val_tt(
+    _a: u32,
+    _b: u32,
+    _c: u32,
+    _d: u32,
+    _e: u64
+) {
+    panic!("Forbid calling __chunk_trace_exploit_val_tt directly");
+}
+
+#[no_mangle]
+pub extern "C" fn __dfsw___chunk_trace_exploit_val_tt(
+    cmpid: u32,
+    context: u32,
+    size: u32,
+    op: u32,
+    val: u64,
+    _l0: DfsanLabel,
+    _l1: DfsanLabel,
+    _l2: DfsanLabel,
+    _l3: DfsanLabel,
+    l4: DfsanLabel,
+) {
+    
+}
+*/

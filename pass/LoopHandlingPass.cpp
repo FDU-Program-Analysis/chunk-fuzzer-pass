@@ -355,14 +355,6 @@ void LoopHandlingPass::initVariables(Function &F, Module &M) {
     ChunkCmpTT = M.getOrInsertFunction("__chunk_trace_switch_tt", ChunkSwTtTy, AL);   
   }
   /*
-  Type *ChunkFnTtArgs[5] = {Int32Ty, Int32Ty, Int32Ty, Int8PtrTy, Int8PtrTy};
-  ChunkFnTtTy = FunctionType::get(VoidTy, ChunkFnTtArgs, false);
-  ChunkFnTT = M.getOrInsertFunction("__chunk_trace_fn_tt", ChunkFnTtTy);
-  if (Function *F = dyn_cast<Function>(ChunkFnTT)) {
-    F->addAttribute(LLVM_ATTRIBUTE_LIST::FunctionIndex, Attribute::NoUnwind);
-    F->addAttribute(LLVM_ATTRIBUTE_LIST::FunctionIndex, Attribute::ReadOnly);
-  }
-    
   Type *ChunkExploitTtArgs[5] = {Int32Ty, Int32Ty, Int32Ty, Int32Ty, Int64Ty};
   ChunkExploitTtTy = FunctionType::get(VoidTy, ChunkExploitTtArgs, false);
   ChunkExploitTT = M.getOrInsertFunction("__chunk_trace_exploit_val_tt",
