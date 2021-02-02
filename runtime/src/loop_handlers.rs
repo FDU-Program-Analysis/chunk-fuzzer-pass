@@ -3,8 +3,8 @@ use angora_common::{tag::*};
 // use itertools::Itertools;
 use lazy_static::lazy_static;
 use crate::{tag_set_wrap};
-use std::{collections::HashMap, fs::File, io::prelude::*, cmp, path::Path};
-use std::time::{SystemTime, UNIX_EPOCH};
+use crate::{label_constraints::LabelConstraint};
+use std::{collections::HashMap, fs::File, io::prelude::*, cmp::*, sync::Mutex, time::*};
 
 const STACK_MAX: usize = 100000;
 
@@ -213,17 +213,6 @@ impl ObjectStack {
         list.append(&mut new_list);
     }
 
-    pub fn minimize_sum(
-        list : &mut Vec<Vec<TaintSeg>>, 
-    ) -> Vec<TaintSeg> {
-        let mut new_list = vec![];
-        for i in list {
-            new_list.append(i);
-        }
-        loop_handlers::ObjectStack::minimize_list(&mut new_list);
-        new_list
-    }
-
 
     pub fn access_check(
         lb: u32,
@@ -336,10 +325,10 @@ impl ObjectStack {
             else {
                 self.objs[self.cur_id].sum.push(i);
             }
-        }*/
+        }
     }
 
-    // dump当前迭代所有数据，并把cur_iter的数据按照loop_cnt作为索引整合进sum中
+    // dump当前迭代所有数据，并把cur_iter的数据整合进sum中
     //  -> (bool, bool) 
     pub fn dump_cur_iter(
         &mut self,
