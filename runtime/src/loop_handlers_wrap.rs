@@ -207,6 +207,7 @@ pub extern "C" fn __dfsw___chunk_trace_fn_tt(
 ) {
     
 }
+*/
 
 #[no_mangle]
 pub extern "C" fn __chunk_trace_exploit_val_tt(
@@ -234,4 +235,3 @@ pub extern "C" fn __dfsw___chunk_trace_exploit_val_tt(
 ) {
     
 }
-*/

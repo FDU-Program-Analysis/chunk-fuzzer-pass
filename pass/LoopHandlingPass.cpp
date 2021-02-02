@@ -165,6 +165,7 @@ struct LoopHandlingPass : public LoopPass {
   void visitBranchInst(Instruction *Inst);
   void visitSwitchInst(Instruction *Inst);
   void visitCmpInst(Instruction *Inst);
+  void visitExploitation(Instruction *Inst);
 
   void processCmp(Instruction *Cond, Instruction *InsertPoint);
   void processBoolCmp(Value *Cond, Instruction *InsertPoint);
@@ -499,6 +500,54 @@ void LoopHandlingPass::visitCmpInst(Instruction *Inst) {
   processCmp(Inst, InsertPoint);
 }
 
+// TODO
+void LoopHandlingLVMPass::visitExploitation(Instruction *Inst) {
+  // For each instruction and called function.
+  bool exploit_all = ExploitList.isIn(*Inst, ExploitCategoryAll);
+  IRBuilder<> IRB(Inst);
+  int numParams = Inst->getNumOperands();
+  CallInst *Caller = dyn_cast<CallInst>(Inst);
+
+  if (Caller) {
+    numParams = Caller->getNumArgOperands();
+  }
+
+  Value *TypeArg =
+      ConstantInt::get(Int32Ty, COND_EXPLOIT_MASK | Inst->getOpcode());
+
+  for (int i = 0; i < numParams && i < MAX_EXPLOIT_CATEGORY; i++) {
+    if (exploit_all || ExploitList.isIn(*Inst, ExploitCategory[i])) {
+      Value *ParamVal = NULL;
+      if (Caller) {
+        ParamVal = Caller->getArgOperand(i);
+      } else {
+        ParamVal = Inst->getOperand(i);
+      }
+      Type *ParamType = ParamVal->getType();
+      if (ParamType->isIntegerTy() || ParamType->isPointerTy()) {
+        if (!isa<ConstantInt>(ParamVal)) {
+          ConstantInt *Cid = ConstantInt::get(Int32Ty, getInstructionId(Inst));
+          int size = ParamVal->getType()->getScalarSizeInBits() / 8;
+          if (ParamType->isPointerTy()) {
+            size = 8;
+          } else if (!ParamType->isIntegerTy(64)) {
+            ParamVal = IRB.CreateZExt(ParamVal, Int64Ty);
+          }
+          Value *SizeArg = ConstantInt::get(Int32Ty, size);
+
+          if (TrackMode) {
+            LoadInst *CurCtx = IRB.CreateLoad(AngoraContext);
+            setInsNonSan(CurCtx);
+            CallInst *ProxyCall = IRB.CreateCall(
+                TraceExploitTT, {Cid, CurCtx, SizeArg, TypeArg, ParamVal});
+            setInsNonSan(ProxyCall);
+          }
+        }
+      }
+    }
+  }
+}
+
 void LoopHandlingPass::processCmp(Instruction *Cond, Instruction *InsertPoint) {
   CmpInst *Cmp = dyn_cast<CmpInst>(Cond);
 
@@ -614,7 +663,7 @@ void LoopHandlingPass::processCallInst(Instruction *Inst) {
           visitSwitchInst(&Inst);
         } else if (isa<CmpInst>(&Inst)) {
           visitCmpInst(&Inst);
-        }
+        } else visitExploitation(&Inst);
       }
     }
   }
@@ -696,7 +745,7 @@ bool LoopHandlingPass::runOnLoop(Loop * L, LPPassManager &LPM) {
           visitSwitchInst(&Inst);
         } else if (isa<CmpInst>(&Inst)) {
           visitCmpInst(&Inst);
-        }
+        } else visitExploitation(&Inst);
       }
     }
   }
@@ -752,7 +801,7 @@ bool LoopHandlingPass::runOnLoop(Loop * L, LPPassManager &LPM) {
           visitSwitchInst(&Inst);
         } else if (isa<CmpInst>(&Inst)) {
           visitCmpInst(&Inst);
-        }
+        } else visitExploitation(&Inst);
       }
     }
     IRBuilder<> ExitBuilder(ExitI);
