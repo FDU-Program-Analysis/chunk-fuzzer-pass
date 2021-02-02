@@ -155,6 +155,29 @@ pub extern "C" fn __dfsw___chunk_trace_cmp_tt(
     println!("__chunk_trace_cmp_tt : {0},{1},{2},{3},{4} ",size,op,arg1,arg2,condition);
 }
 
+#[no_mangle]
+pub extern "C" fn __chunk_trace_switch_tt(
+    _a: u32,
+    _b: u64,
+    _c: u32,
+    _d: *mut u64
+) {
+    panic!("Forbid calling __chunk_trace_switch_tt directly");
+}
 
+
+#[no_mangle]
+pub extern "C" fn __dfsw___chunk_trace_switch_tt(
+    size: u32,
+    condition: u64,
+    num: u32,
+    args: *mut u64,
+    _l0: DfsanLabel,
+    l1: DfsanLabel,
+    _l2: DfsanLabel,
+    _l3: DfsanLabel,
+) {
+    println!("__chunk_trace_switch_tt : {0},{1},{2},{3} ",size,condition,nums,args);
+}
 
 

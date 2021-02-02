@@ -343,16 +343,18 @@ void LoopHandlingPass::initVariables(Function &F, Module &M) {
                          Attribute::OptimizeNone);
     ChunkCmpTT = M.getOrInsertFunction("__chunk_trace_cmp_tt", ChunkCmpTtTy, AL);   
   }
-  /*
-  Type *ChunkSwTtArgs[6] = {Int32Ty, Int32Ty, Int32Ty,
-                            Int64Ty, Int32Ty, Int64PtrTy};
-  ChunkSwTtTy = FunctionType::get(VoidTy, TraceSwTtArgs, false);
-  ChunkSwTT = M.getOrInsertFunction("__chunk_trace_switch_tt", ChunkSwTtTy);
-  if (Function *F = dyn_cast<Function>(ChunkSwTT)) {
-    F->addAttribute(LLVM_ATTRIBUTE_LIST::FunctionIndex, Attribute::NoUnwind);
-    F->addAttribute(LLVM_ATTRIBUTE_LIST::FunctionIndex, Attribute::ReadNone);
+  
+  Type *ChunkSwTtArgs[4] = {Int32Ty, Int64Ty, Int32Ty, Int64PtrTy};
+  ChunkSwTtTy = FunctionType::get(VoidTy, ChunkSwTtArgs, false);
+  {
+    AttributeList AL;
+    AL = AL.addAttribute(CTX, AttributeList::FunctionIndex,
+                         Attribute::NoInline);
+    AL = AL.addAttribute(CTX, AttributeList::FunctionIndex,
+                         Attribute::OptimizeNone);
+    ChunkCmpTT = M.getOrInsertFunction("__chunk_trace_switch_tt", ChunkSwTtTy, AL);   
   }
-
+  /*
   Type *ChunkFnTtArgs[5] = {Int32Ty, Int32Ty, Int32Ty, Int8PtrTy, Int8PtrTy};
   ChunkFnTtTy = FunctionType::get(VoidTy, ChunkFnTtArgs, false);
   ChunkFnTT = M.getOrInsertFunction("__chunk_trace_fn_tt", ChunkFnTtTy);
@@ -452,7 +454,6 @@ void LoopHandlingPass::visitBranchInst(Instruction *Inst) {
     if (Cond && Cond->getType()->isIntegerTy() && !isa<ConstantInt>(Cond)) {
       if (!isa<CmpInst>(Cond)) {
         // From  and, or, call, phi ....
-        // Constant *Cid = ConstantInt::get(Int32Ty, getInstructionId(Inst));
         processBoolCmp(Cond, Inst);
       }
     }
@@ -474,7 +475,6 @@ void LoopHandlingPass::visitSwitchInst(Instruction *Inst) {
   if (num_bytes == 0 || num_bits % 8 > 0)
     return;
   
-  // Constant *Cid = ConstantInt::get(Int32Ty, getInstructionId(Inst));
   IRBuilder<> IRB(Sw);
 
   Value *SizeArg = ConstantInt::get(Int32Ty, num_bytes);
@@ -487,18 +487,16 @@ void LoopHandlingPass::visitSwitchInst(Instruction *Inst) {
     ArgList.push_back(ConstantExpr::getCast(CastInst::ZExt, C, Int64Ty));
   }
 
-  /*
   ArrayType *ArrayOfInt64Ty = ArrayType::get(Int64Ty, ArgList.size());
   GlobalVariable *ArgGV = new GlobalVariable(
       M, ArrayOfInt64Ty, false, GlobalVariable::InternalLinkage,
       ConstantArray::get(ArrayOfInt64Ty, ArgList),
-      "__angora_switch_arg_values");
+      "__chunk_switch_arg_values");
   Value *SwNum = ConstantInt::get(Int32Ty, ArgList.size());
   Value *ArrPtr = IRB.CreatePointerCast(ArgGV, Int64PtrTy);
   Value *CondExt = IRB.CreateZExt(Cond, Int64Ty);
   CallInst *ProxyCall = IRB.CreateCall(
-      TraceSwTT, {Cid, CurCtx, SizeArg, CondExt, SwNum, ArrPtr});
-  */
+      TraceSwTT, {SizeArg, CondExt, SwNum, ArrPtr});
 }
 
 void LoopHandlingPass::visitCmpInst(Instruction *Inst) {
@@ -561,14 +559,12 @@ void LoopHandlingPass::processBoolCmp(Value *Cond, Instruction *InsertPoint) {
   Value *SizeArg = ConstantInt::get(Int32Ty, 1);
   Value *TypeArg = ConstantInt::get(Int32Ty, COND_EQ_OP | COND_BOOL_MASK);
   outs() << "\tBoolCmp: " << SizeArg->getValueName() << TypeArg->getValueName() << OpArg[1]->getValueName() << "\n";
-  /* 
+  
   IRBuilder<> IRB(InsertPoint);
   Value *CondExt = IRB.CreateZExt(Cond, Int32Ty);
   OpArg[0] = IRB.CreateZExt(CondExt, Int64Ty);
   CallInst *ProxyCall =
-      IRB.CreateCall(TraceCmpTT, {Cid, CurCtx, SizeArg, TypeArg, OpArg[0],
-                                    OpArg[1], CondExt});
-  */
+      IRB.CreateCall(ChunkCmpTT, {SizeArg, TypeArg, OpArg[0], OpArg[1], CondExt});
   
 }
 
