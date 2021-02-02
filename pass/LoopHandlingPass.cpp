@@ -338,9 +338,9 @@ void LoopHandlingPass::initVariables(Function &F, Module &M) {
   {
     AttributeList AL;
     AL = AL.addAttribute(CTX, AttributeList::FunctionIndex,
-                         Attribute::NoUnwind);
+                         Attribute::NoInline);
     AL = AL.addAttribute(CTX, AttributeList::FunctionIndex,
-                         Attribute::ReadNone);
+                         Attribute::OptimizeNone);
     ChunkCmpTT = M.getOrInsertFunction("__chunk_trace_cmp_tt", ChunkCmpTtTy, AL);   
   }
   /*
@@ -541,7 +541,8 @@ void LoopHandlingPass::processCmp(Instruction *Cond, Instruction *InsertPoint) {
   Value *TypeArg = ConstantInt::get(Int32Ty, predicate);
   outs() << "\t" << predicate << "\n" ;
   
-  IRBuilder<> IRB(Cmp);
+  // Instruction *InsertPoint = Inst->getNextNode();
+  IRBuilder<> IRB(InsertPoint);
   Value *CondExt = IRB.CreateZExt(Cond, Int32Ty);
   OpArg[0] = castArgType(IRB, OpArg[0]);
   OpArg[1] = castArgType(IRB, OpArg[1]);
