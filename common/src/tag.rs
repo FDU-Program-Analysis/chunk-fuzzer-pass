@@ -7,20 +7,34 @@ pub struct TagSeg {
     pub begin: u32,
     pub end: u32,
 }
-/*
-enum ChunkField {
-    id,
-    length,
-    checksum,
-    payload,
-}
 
 #[derive(Serialize, Deserialize, PartialEq, Eq, Ord, PartialOrd, Debug, Clone, Copy, Hash)]
+pub enum ChunkField {
+    Id,
+    Length,
+    Checksum,
+    Index,
+    Other,
+}
+
+#[derive(Serialize, Deserialize, PartialEq, Eq, Ord, PartialOrd, Debug, Clone, Hash)]
 #[repr(C)] 
 pub struct TaintSeg {
+    pub lb: u32,
     pub begin: u32,
     pub end: u32,
-    pub field : ChunkField,
+    pub son: Option<Vec<TaintSeg>>,
+    //pub is_loop: bool,
+}
+
+/*
+impl TaintSeg {
+    pub fn new(
+
+    ) {
+
+    }
+
 }
 */
 
