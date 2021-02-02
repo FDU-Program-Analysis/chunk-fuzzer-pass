@@ -17,16 +17,26 @@ pub enum ChunkField {
     Other,
 }
 
-#[derive(Serialize, Deserialize, PartialEq, Eq, Ord, PartialOrd, Debug, Clone, Copy, Hash)]
+#[derive(Serialize, Deserialize, PartialEq, Eq, Ord, PartialOrd, Debug, Clone, Hash)]
 #[repr(C)] 
 pub struct TaintSeg {
-    // pub lb: u32,
+    pub lb: u32,
     pub begin: u32,
     pub end: u32,
-    pub field : ChunkField,
-    // pub constraints: 
+    pub son: Option<Vec<TaintSeg>>,
+    //pub is_loop: bool,
 }
 
+/*
+impl TaintSeg {
+    pub fn new(
+
+    ) {
+
+    }
+
+}
+*/
 
 // impl TagSeg {
 //     pub fn slice_from<'a>(&self, v: &'a [u8]) -> &'a [u8] {
