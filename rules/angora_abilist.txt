@@ -14,6 +14,8 @@ fun:__chunk_dump_each_iter=uninstrumented
 fun:__chunk_dump_each_iter=custom
 fun:__chunk_pop_obj=uninstrumented
 fun:__chunk_pop_obj=custom
+fun:__chunk_trace_cmp_tt=uninstrumented
+fun:__chunk_trace_cmp_tt=custom
 
 # Trace-PC
 fun:__angora_trace_cmp=uninstrumented

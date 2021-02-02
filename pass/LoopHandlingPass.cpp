@@ -127,12 +127,21 @@ struct LoopHandlingPass : public LoopPass {
   Constant *BoolTrue;
   Constant *BoolFalse;
 
+  FunctionType *ChunkCmpTtTy;
+  FunctionType *ChunkSwTtTy;
+  FunctionType *ChunkFnTtTy;
+  FunctionType *ChunkExploitTtTy;
 
   FunctionCallee PrintfFn;
   FunctionCallee LoadLabelDumpFn;
   FunctionCallee PushNewObjFn;
   FunctionCallee DumpEachIterFn;
   FunctionCallee PopObjFn;
+
+  FunctionCallee ChunkCmpTT;
+  FunctionCallee ChunkSwTT;
+  FunctionCallee ChunkFnTT;
+  FunctionCallee ChunkExploitTT;
 
 
   LoopHandlingPass() : LoopPass(ID) {}
@@ -147,6 +156,8 @@ struct LoopHandlingPass : public LoopPass {
   u32 getFunctionId(Function *F);
   void setRandomNumSeed(u32 seed);
   void initVariables(Function &F, Module &M);
+
+  Value *castArgType(IRBuilder<> &IRB, Value *V); //从angorapass里抄来的 setValueNotSan直接注释掉了
 
   void visitCallInst(Instruction *Inst);
   void visitInvokeInst(Instruction *Inst);
@@ -322,6 +333,44 @@ void LoopHandlingPass::initVariables(Function &F, Module &M) {
     PopObjFn = M.getOrInsertFunction("__chunk_pop_obj", PopObjArgsTy, AL);   
   }
 
+  Type *ChunkCmpTtArgs[5] = {Int32Ty, Int32Ty, Int64Ty, Int64Ty, Int32Ty};
+  ChunkCmpTtTy = FunctionType::get(VoidTy, ChunkCmpTtArgs, false);
+  {
+    AttributeList AL;
+    AL = AL.addAttribute(CTX, AttributeList::FunctionIndex,
+                         Attribute::NoUnwind);
+    AL = AL.addAttribute(CTX, AttributeList::FunctionIndex,
+                         Attribute::ReadNone);
+    ChunkCmpTT = M.getOrInsertFunction("__chunk_trace_cmp_tt", ChunkCmpTtTy, AL);   
+  }
+  /*
+  Type *ChunkSwTtArgs[6] = {Int32Ty, Int32Ty, Int32Ty,
+                            Int64Ty, Int32Ty, Int64PtrTy};
+  ChunkSwTtTy = FunctionType::get(VoidTy, TraceSwTtArgs, false);
+  ChunkSwTT = M.getOrInsertFunction("__chunk_trace_switch_tt", ChunkSwTtTy);
+  if (Function *F = dyn_cast<Function>(ChunkSwTT)) {
+    F->addAttribute(LLVM_ATTRIBUTE_LIST::FunctionIndex, Attribute::NoUnwind);
+    F->addAttribute(LLVM_ATTRIBUTE_LIST::FunctionIndex, Attribute::ReadNone);
+  }
+
+  Type *ChunkFnTtArgs[5] = {Int32Ty, Int32Ty, Int32Ty, Int8PtrTy, Int8PtrTy};
+  ChunkFnTtTy = FunctionType::get(VoidTy, ChunkFnTtArgs, false);
+  ChunkFnTT = M.getOrInsertFunction("__chunk_trace_fn_tt", ChunkFnTtTy);
+  if (Function *F = dyn_cast<Function>(ChunkFnTT)) {
+    F->addAttribute(LLVM_ATTRIBUTE_LIST::FunctionIndex, Attribute::NoUnwind);
+    F->addAttribute(LLVM_ATTRIBUTE_LIST::FunctionIndex, Attribute::ReadOnly);
+  }
+    
+  Type *ChunkExploitTtArgs[5] = {Int32Ty, Int32Ty, Int32Ty, Int32Ty, Int64Ty};
+  ChunkExploitTtTy = FunctionType::get(VoidTy, ChunkExploitTtArgs, false);
+  ChunkExploitTT = M.getOrInsertFunction("__chunk_trace_exploit_val_tt",
+                                           ChunkExploitTtTy);
+  if (Function *F = dyn_cast<Function>(ChunkExploitTT)) {
+    F->addAttribute(LLVM_ATTRIBUTE_LIST::FunctionIndex, Attribute::NoUnwind);
+    F->addAttribute(LLVM_ATTRIBUTE_LIST::FunctionIndex, Attribute::ReadNone);
+    }
+  */
+
   /*
   FuncPop = M.getOrInsertGlobal("FuncPop", Int8Ty);
   
@@ -333,6 +382,27 @@ void LoopHandlingPass::initVariables(Function &F, Module &M) {
   FuncPopGV->setInitializer(BoolFalse);
   */
 
+}
+
+Value *LoopHandlingPass::castArgType(IRBuilder<> &IRB, Value *V) {
+  Type *OpType = V->getType();
+  Value *NV = V;
+  if (OpType->isFloatTy()) {
+    NV = IRB.CreateFPToUI(V, Int32Ty);
+    // setValueNonSan(NV);
+    NV = IRB.CreateIntCast(NV, Int64Ty, false);
+    // setValueNonSan(NV);
+  } else if (OpType->isDoubleTy()) {
+    NV = IRB.CreateFPToUI(V, Int64Ty);
+    // setValueNonSan(NV);
+  } else if (OpType->isPointerTy()) {
+    NV = IRB.CreatePtrToInt(V, Int64Ty);
+  } else {
+    if (OpType->isIntegerTy() && OpType->getIntegerBitWidth() < 64) {
+      NV = IRB.CreateZExt(V, Int64Ty);
+    }
+  }
+  return NV;
 }
 
 void LoopHandlingPass::visitCallInst(Instruction *Inst) {
@@ -470,16 +540,14 @@ void LoopHandlingPass::processCmp(Instruction *Cond, Instruction *InsertPoint) {
   }
   Value *TypeArg = ConstantInt::get(Int32Ty, predicate);
   outs() << "\t" << predicate << "\n" ;
-  /*
-  IRBuilder<> IRB(InsertPoint);
+  
+  IRBuilder<> IRB(Cmp);
   Value *CondExt = IRB.CreateZExt(Cond, Int32Ty);
   OpArg[0] = castArgType(IRB, OpArg[0]);
   OpArg[1] = castArgType(IRB, OpArg[1]);
-  
+  outs() << "insert ChunkCmpTT\n";
   CallInst *ProxyCall =
-      IRB.CreateCall(TraceCmpTT, {Cid, CurCtx, SizeArg, TypeArg, OpArg[0],
-                                    OpArg[1], CondExt});
-  */
+      IRB.CreateCall(ChunkCmpTT, {SizeArg, TypeArg, OpArg[0], OpArg[1], CondExt});
 }
 
 

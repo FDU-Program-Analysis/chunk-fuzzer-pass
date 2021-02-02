@@ -128,3 +128,33 @@ pub extern "C" fn __chunk_set_input_file_name(name: *const c_char){
     } 
 }
 
+#[no_mangle]
+pub extern "C" fn __chunk_trace_cmp_tt(
+    _a: u32,
+    _b: u32,
+    _c: u64,
+    _d: u64,
+    _e: u32,
+) {
+    panic!("Forbid calling __chunk_trace_cmp_tt directly");
+}
+
+#[no_mangle]
+pub extern "C" fn __dfsw___chunk_trace_cmp_tt(
+    size: u32,
+    op: u32,
+    arg1: u64,
+    arg2: u64,
+    condition: u32,
+    _l0: DfsanLabel,
+    _l1: DfsanLabel,
+    l2: DfsanLabel,
+    l3: DfsanLabel,
+    _l4: DfsanLabel,
+) {
+    println!("__chunk_trace_cmp_tt : {0},{1},{2},{3},{4} ",size,op,arg1,arg2,condition);
+}
+
+
+
+
