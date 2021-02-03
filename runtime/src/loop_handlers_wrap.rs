@@ -13,15 +13,15 @@ lazy_static! {
 }
 
 #[no_mangle]
-pub extern "C" fn __chunk_get_dump_label(
+pub extern "C" fn __chunk_get_load_label(
     _a: *const i8,
     _b: usize,
 ) {
-    panic!("Forbid calling __chunk_get_dump_label directly");
+    panic!("Forbid calling __chunk_get_load_label directly");
 }
 
 #[no_mangle]
-pub extern "C" fn __dfsw___chunk_get_dump_label(
+pub extern "C" fn __dfsw___chunk_get_load_label(
     addr: *const i8, 
     size: usize,
     _l0: DfsanLabel,

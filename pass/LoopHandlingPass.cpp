@@ -315,7 +315,7 @@ void LoopHandlingPass::initVariables(Function &F, Module &M) {
                          Attribute::NoInline);
     AL = AL.addAttribute(CTX, AttributeList::FunctionIndex,
                          Attribute::OptimizeNone);
-    LoadLabelDumpFn = M.getOrInsertFunction("__chunk_get_dump_label", LoadLabelDumpArgsTy, AL);   
+    LoadLabelDumpFn = M.getOrInsertFunction("__chunk_get_load_label", LoadLabelDumpArgsTy, AL);   
   }
 
   Type *PushNewObjArgs[3] = {Int8Ty,Int32Ty,Int32Ty};

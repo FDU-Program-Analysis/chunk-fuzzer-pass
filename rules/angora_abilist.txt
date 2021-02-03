@@ -6,8 +6,8 @@ fun:dfsan_get_label_range=discard
 
 ### RT
 # Loop-Handler
-fun:__chunk_get_dump_label=uninstrumented
-fun:__chunk_get_dump_label=custom
+fun:__chunk_get_load_label=uninstrumented
+fun:__chunk_get_load_label=custom
 fun:__chunk_push_new_obj=uninstrumented
 fun:__chunk_push_new_obj=custom
 fun:__chunk_dump_each_iter=uninstrumented
