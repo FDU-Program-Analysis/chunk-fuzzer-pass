@@ -20,7 +20,7 @@ pub enum ChunkField {
 #[derive(Serialize, Deserialize, PartialEq, Eq, Ord, PartialOrd, Debug, Clone, Hash)]
 #[repr(C)] 
 pub struct TaintSeg {
-    pub lb: u32,
+    pub lb: u64,
     pub begin: u32,
     pub end: u32,
     pub son: Option<Vec<TaintSeg>>,

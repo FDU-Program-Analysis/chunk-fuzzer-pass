@@ -177,7 +177,7 @@ pub extern "C" fn __dfsw___chunk_trace_switch_tt(
     _l2: DfsanLabel,
     _l3: DfsanLabel,
 ) {
-    println!("__chunk_trace_switch_tt : {0},{1},{2},{3} ",size,condition,nums,args);
+    println!("__chunk_trace_switch_tt : {},{},{},{:?} ",size,condition,num,args);
 }
 
 /*
