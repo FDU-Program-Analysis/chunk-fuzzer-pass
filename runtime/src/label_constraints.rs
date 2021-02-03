@@ -9,7 +9,7 @@ pub struct constraint {
 
 #[derive(Debug)]
 pub struct LabelConstraint {
-    hmp: HashMap<u32,bool>,
+    hmp: HashMap<u64,bool>,
     // hmp: HashMap<u32, Vec<CondStmtBase>>,
 }
 
@@ -22,7 +22,7 @@ impl LabelConstraint{
 
     pub fn insert_lb (
         &mut self,
-        lb: u32,
+        lb: u64,
     ) -> bool {
         if self.hmp.contains_key(&lb) {
             false
