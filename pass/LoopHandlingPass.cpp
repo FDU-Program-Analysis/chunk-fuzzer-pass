@@ -453,6 +453,8 @@ void LoopHandlingPass::visitCallInst(Instruction *Inst) {
   CallInst *Caller = dyn_cast<CallInst>(Inst);
   Function *Callee = Caller->getCalledFunction();
 
+  visitExploitation(Inst);
+
   if (!Callee || Callee->isIntrinsic() || isa<InlineAsm>(Caller->getCalledValue())) {
     return;
   }
@@ -465,6 +467,8 @@ void LoopHandlingPass::visitInvokeInst(Instruction *Inst) {
 
   InvokeInst *Caller = dyn_cast<InvokeInst>(Inst);
   Function *Callee = Caller->getCalledFunction();
+
+  visitExploitation(Inst);
 
   if (!Callee || Callee->isIntrinsic() ||
       isa<InlineAsm>(Caller->getCalledValue())) {
@@ -581,6 +585,7 @@ void LoopHandlingPass::visitExploitation(Instruction *Inst) {
       // 8 32
     }
     else if(ExploitList.isIn(*Inst, LengthFunc[1])){
+      outs() << "cmpfn1 instr\n" ;
       Value *dst = Caller->getArgOperand(0);
       CallInst *LenFnCall = AfterBuilder.CreateCall(ChunkLenFnTT, {dst, len});
     }
@@ -660,12 +665,10 @@ void LoopHandlingPass::processCallInst(Instruction *Inst) {
   CallInst *Caller = dyn_cast<CallInst>(Inst);
   Function *Func = Caller->getCalledFunction();
   u32 hFunc = getFunctionId(Func);
+
   if (Func->getName().startswith(StringRef("__chunk_")) || Func->getName().startswith(StringRef("__dfsw_")) ||Func->getName().startswith(StringRef("asan.module"))) {
     return;
   }
-
-  visitExploitation(Inst);
-
   if (Func->isDeclaration()) {
     return;
   }

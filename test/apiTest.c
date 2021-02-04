@@ -1,6 +1,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <unistd.h>
 
 #include "../dfsan_rt/dfsan_interface.h"
 
@@ -33,19 +34,67 @@ void cmp_test(){
 }
 
 void len0_test(){
+    
+    char lenbuf[10];
+    fread(lenbuf,sizeof(char),5,fp);
+    int len[3];
+    len[0]=lenbuf[0]-'0';
+    len[1]=lenbuf[1]-'0';
+    len[2]=lenbuf[2]-'0';
+
     char buf1[10];
+    for(int i=0;i<10;i++){
+        buf1[i]='\0';
+    }
+    for(int i=0;i<3;i++){
+        fread(buf1, sizeof(char),len[i],fp);
+        dfsan_label buffer1 = dfsan_read_label(buf1,sizeof(buf1));
+        dfsan_label len_lb = dfsan_read_label(len+i,sizeof(len[i]));
+        printf("%s %d %d\n",buf1,buffer1,len_lb);
+    }
+}
+
+void len1_test(){
+    char buffer[20];
+    fread(buffer,sizeof(char),20,fp);
+    fseek(fp,0,SEEK_SET);
+
+    char target[10];
     char lenbuf[10];
     int len;
     for(int i=0;i<10;i++){
-        buf1[i]='\0';
+        target[i]='\0';
         lenbuf[i]='\0';
     }
     for(int i=0;i<3;i++){
         fread(lenbuf,sizeof(char),1,fp);
-        len = lenbuf[0]-'0';
-        fread(buf1, sizeof(char),len,fp);
+        len=lenbuf[0]-'0';
+        // memcpy(target,buffer,len);
+        strncpy(target,buffer,len);
+        dfsan_label buffer1 = dfsan_read_label(target,sizeof(target));
+        printf("%s %d\n",target,buffer1);
+    }
+}
+
+void len2_test(){
+    int fd = fileno(fp);
+
+    char lenbuf[10];
+    read(fd,lenbuf,5);
+    int len[3];
+    len[0]=lenbuf[0]-'0';
+    len[1]=lenbuf[1]-'0';
+    len[2]=lenbuf[2]-'0';
+
+    char buf1[10];
+    for(int i=0;i<10;i++){
+        buf1[i]='\0';
+    }
+    for(int i=0;i<3;i++){
+        read(fd,buf1,len[i]);
         dfsan_label buffer1 = dfsan_read_label(buf1,sizeof(buf1));
-        printf("%s %d\n",buf1,buffer1);
+        dfsan_label len_lb = dfsan_read_label(len+i,sizeof(len[i]));
+        printf("%s %d %d\n",buf1,buffer1,len_lb);
     }
 }
 
@@ -53,7 +102,7 @@ int main()
 {
  	fp = fopen("file", "rb");
     
-    len0_test();
+    len2_test();
 
     fclose(fp);
 	return 0;
