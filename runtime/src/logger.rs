@@ -29,10 +29,16 @@ impl Logger {
         }
     }
 
-    fn save_tag(&mut self, lb: u32) {
+    fn save_tag(&mut self, lb: u32) -> {
         if lb > 0 {
-            let tag = tag_set_wrap::tag_set_find(lb as usize);
-            self.data.tags.entry(lb).or_insert(tag);
+            // let tag = tag_set_wrap::tag_set_find(lb as usize);
+            if self.data.tags.contains_key(&lb) {
+                false
+            }
+            else {
+                self.data.tags.entry(lb).or_insert(true);
+                true
+            }
         }
     }
 

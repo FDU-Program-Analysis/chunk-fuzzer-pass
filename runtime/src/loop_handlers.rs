@@ -9,7 +9,7 @@ use std::{collections::HashMap, fs::File, io::prelude::*, cmp::*, sync::Mutex, t
 const STACK_MAX: usize = 100000;
 
 lazy_static! {
-    static ref LBCN: Mutex<Option<LabelConstraint>> = Mutex::new(Some(LabelConstraint::new()));
+    static ref LC: Mutex<Option<Logger>> = Mutex::new(Some(Logger::new()));
 }
 
 // Loop & Function labels. 
@@ -223,9 +223,9 @@ impl ObjectStack {
     pub fn access_check(
         lb: u64,
     ) -> bool {
-        let mut lbcnl = LBCN.lock().unwrap();
-        if let Some(ref mut lbcn) = *lbcnl {
-            lbcn.insert_lb(lb)
+        let mut lcl = LC.lock().unwrap();
+        if let Some(ref mut lc) = *lcl {
+            lc.save_tag(lb)
         }
         else {
             false
@@ -256,12 +256,13 @@ impl ObjectStack {
             size
         };
         let lb = unsafe { dfsan_read_label(addr, arglen) };
-        if lb == 0 {
+        if lb <= 0 {
             return;
         }
         if !loop_handlers::ObjectStack::access_check(lb as u64) {
             return;
         }
+        tag_set_wrap::__angora_tag_set_infer_shape_in_math_op(lb, size);
         let mut set_list = tag_set_wrap::tag_set_find(lb as usize);
 
         if set_list.len() > 0 {

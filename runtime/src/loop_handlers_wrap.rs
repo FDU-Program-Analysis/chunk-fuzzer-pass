@@ -161,7 +161,19 @@ pub extern "C" fn __dfsw___chunk_trace_cmp_tt(
     _l6: DfsanLabel,
     _l7: DfsanLabel
 ) {
-    println!("__chunk_trace_cmp_tt : {0},{1},{2},{3},{4},{5},{6},{7}",size,op,arg1,arg2,condition,is_loop,is_cnst1,is_cnst2);
+    //println!("[CMP] id: {}, ctx: {}", cmpid, get_context());
+    // ret_label: *mut DfsanLabel
+    let lb1 = l4;
+    let lb2 = l5;
+    if lb1 == 0 && lb2 == 0 {
+        return;
+    }
+
+    let op = infer_eq_sign(op, lb1, lb2);
+    // infer_shape(lb1, size);
+    // infer_shape(lb2, size);
+
+    log_cmp(cmpid, context, condition, op, size, lb1, lb2, arg1, arg2);
 }
 
 #[no_mangle]
@@ -189,11 +201,46 @@ pub extern "C" fn __dfsw___chunk_trace_switch_tt(
     _l3: DfsanLabel,
     _l4: DfsanLabel,
 ) {
-    println!("__chunk_trace_switch_tt : {0},{1},{2},{3}",size,condition,num,is_loop);
+    let lb = l3;
+    if lb == 0 {
+        return;
+    }
+
+    infer_shape(lb, size);
+
+    let mut op = defs::COND_SW_OP;
+    if tag_set_wrap::tag_set_get_sign(lb as usize) {
+        op |= defs::COND_SIGN_MASK;
+    }
+
+    let cond = CondStmtBase {
+        cmpid,
+        context,
+        order: 0,
+        belong: 0,
+        condition: defs::COND_FALSE_ST,
+        level: 0,
+        op,
+        size,
+        lb1: lb,
+        lb2: 0,
+        arg1: condition,
+        arg2: 0,
+    };
+
     let sw_args = unsafe { slice::from_raw_parts(args, num as usize) };
 
-    for (i, arg) in sw_args.iter().enumerate() {
-        println!("case {1} : {0}", i,arg);
+    let mut lcl = LC.lock().expect("Could not lock LC.");
+    if let Some(ref mut lc) = *lcl {
+        for (i, arg) in sw_args.iter().enumerate() {
+            let mut cond_i = cond.clone();
+            cond_i.order += (i << 16) as u32;
+            cond_i.arg2 = *arg;
+            if *arg == condition {
+                cond_i.condition = defs::COND_DONE_ST;
+            }
+            lc.save(cond_i);
+        }
     }
 }
 
@@ -237,8 +284,72 @@ pub extern "C" fn __dfsw___chunk_trace_cmpfn_tt(
         else if is_cnst2 {println!("__chunk_trace_cmpfn_tt : <{0},{1},enum> ", lb1, lb2);}
     }
     
+    let (arglen1, arglen2) = if size == 0 {
+        unsafe { (libc::strlen(parg1) as usize, libc::strlen(parg2) as usize) }
+    } else {
+        (size as usize, size as usize)
+    };
+
+    let lb1 = unsafe { dfsan_read_label(parg1, arglen1) };
+    let lb2 = unsafe { dfsan_read_label(parg2, arglen2) };
+
+    if lb1 == 0 && lb2 == 0 {
+        return;
+    }
+
+    let arg1 = unsafe { slice::from_raw_parts(parg1 as *mut u8, arglen1) }.to_vec();
+    let arg2 = unsafe { slice::from_raw_parts(parg2 as *mut u8, arglen2) }.to_vec();
+
+    let mut cond = CondStmtBase {
+        cmpid,
+        context,
+        order: 0,
+        belong: 0,
+        condition: defs::COND_FALSE_ST,
+        level: 0,
+        op: defs::COND_FN_OP,
+        size: 0,
+        lb1: 0,
+        lb2: 0,
+        arg1: 0,
+        arg2: 0,
+    };
+
+    if lb1 > 0 {
+        cond.lb1 = lb1;
+        cond.size = arglen2 as u32;
+    } else if lb2 > 0 {
+        cond.lb2 = lb2;
+        cond.size = arglen1 as u32;
+    }
+    let mut lcl = LC.lock().expect("Could not lock LC.");
+    if let Some(ref mut lc) = *lcl {
+        lc.save(cond);
+        lc.save_magic_bytes((arg1, arg2));
+    }
 }
 
+pub extern "C" fn __chunk_trace_lenfn_tt(
+    _a: u32,
+    _b: u32,
+    _c: u32,
+    _d: *mut i8,
+    _e: *mut i8
+) {
+    panic!("Forbid calling __chunk_trace_lenfn_tt directly");
+}
+
+pub extern "C" fn __chunk_trace_ofsfn_tt(
+    _a: u32,
+    _b: u32,
+    _c: u32,
+    _d: *mut i8,
+    _e: *mut i8
+) {
+    panic!("Forbid calling __chunk_trace_ofsfn_tt directly");
+}
+
+/*
 #[no_mangle]
 pub extern "C" fn __chunk_trace_offsfn_tt(
     _a: u32,
@@ -309,4 +420,42 @@ pub extern "C" fn __dfsw___chunk_trace_lenfn_tt(
     }
     
 }
+*/
 
+fn infer_shape(lb: u32, size: u32) {
+    if lb > 0 {
+        tag_set_wrap::__angora_tag_set_infer_shape_in_math_op(lb, size);
+    }
+}
+
+#[inline]
+fn log_cmp(
+    cmpid: u32,
+    context: u32,
+    condition: u32,
+    op: u32,
+    size: u32,
+    lb1: u32,
+    lb2: u32,
+    arg1: u64,
+    arg2: u64,
+) {
+    let cond = CondStmtBase {
+        cmpid,
+        context,
+        order: 0,
+        belong: 0,
+        condition,
+        level: 0,
+        op,
+        size,
+        lb1,
+        lb2,
+        arg1,
+        arg2,
+    };
+    let mut lcl = LC.lock().expect("Could not lock LC.");
+    if let Some(ref mut lc) = *lcl {
+        lc.save(cond);
+    }
+}
