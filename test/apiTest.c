@@ -32,11 +32,28 @@ void cmp_test(){
     }
 }
 
+void len0_test(){
+    char buf1[10];
+    char lenbuf[10];
+    int len;
+    for(int i=0;i<10;i++){
+        buf1[i]='\0';
+        lenbuf[i]='\0';
+    }
+    for(int i=0;i<3;i++){
+        fread(lenbuf,sizeof(char),1,fp);
+        len = lenbuf[0]-'0';
+        fread(buf1, sizeof(char),len,fp);
+        dfsan_label buffer1 = dfsan_read_label(buf1,sizeof(buf1));
+        printf("%s %d\n",buf1,buffer1);
+    }
+}
+
 int main()
 {
  	fp = fopen("file", "rb");
     
-    cmp_test();
+    len0_test();
 
     fclose(fp);
 	return 0;

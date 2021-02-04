@@ -372,7 +372,7 @@ void LoopHandlingPass::initVariables(Function &F, Module &M) {
     ChunkSwTT = M.getOrInsertFunction("__chunk_trace_switch_tt", ChunkSwTtTy, AL);   
   }
 
-  Type *ChunkCmpFnTtArgs[2] = {Int8Ty, Int8Ty};
+  Type *ChunkCmpFnTtArgs[2] = {Int8PtrTy, Int8PtrTy};
   ChunkCmpFnTtTy = FunctionType::get(VoidTy, ChunkCmpFnTtArgs, false);
   {
     AttributeList AL;
@@ -394,6 +394,16 @@ void LoopHandlingPass::initVariables(Function &F, Module &M) {
     ChunkOffsFnTT = M.getOrInsertFunction("__chunk_trace_offsfn_tt", ChunkOffsFnTtTy, AL);   
   }
   
+  Type *ChunkLenFnTtArgs[2] = {Int8PtrTy, Int32Ty};
+  ChunkLenFnTtTy = FunctionType::get(VoidTy, ChunkLenFnTtArgs, false);
+  {
+    AttributeList AL;
+    AL = AL.addAttribute(CTX, AttributeList::FunctionIndex,
+                         Attribute::NoInline);
+    AL = AL.addAttribute(CTX, AttributeList::FunctionIndex,
+                         Attribute::OptimizeNone);
+    ChunkLenFnTT = M.getOrInsertFunction("__chunk_trace_lenfn_tt", ChunkLenFnTtTy, AL);   
+  }
 
   /*
   FuncPop = M.getOrInsertGlobal("FuncPop", Int8Ty);
@@ -563,22 +573,21 @@ void LoopHandlingPass::visitExploitation(Instruction *Inst) {
     // 32 32
   } else{
     Value *len = Caller->getArgOperand(2);
-
-    // if(ExploitList.isIn(*Inst, LengthFunc[0])){
-    //   Value *dst = getArgOperand(0);
-    //   Value *len0 = getArgOperand(1);
-    //   CallInst *LenFnCall1 = AfterBuilder.CreateCall(TraceExploitTT, {dst, len, LenFn});
-    //   CallInst *LenFnCall2 = AfterBuilder.CreateCall(TraceExploitTT, {dst, len0, LenFn});
-    //   // 8 32
-    // }
-    // else if(ExploitList.isIn(*Inst, LengthFunc[1])){
-    //   Value *dst = getArgOperand(0);
-    //   CallInst *LenFnCall = AfterBuilder.CreateCall(TraceExploitTT, {dst, len, LenFn});
-    // }
-    // else if(ExploitList.isIn(*Inst, LengthFunc[2])){
-    //   Value *dst = getArgOperand(1);
-    //   CallInst *LenFnCall = AfterBuilder.CreateCall(TraceExploitTT, {dst, len, LenFn});
-    // }
+    if(ExploitList.isIn(*Inst, LengthFunc[0])){
+      Value *dst = Caller->getArgOperand(0);
+      Value *len0 = Caller->getArgOperand(1);
+      CallInst *LenFnCall1 = AfterBuilder.CreateCall(ChunkLenFnTT, {dst, len});
+      CallInst *LenFnCall2 = AfterBuilder.CreateCall(ChunkLenFnTT, {dst, len0});
+      // 8 32
+    }
+    else if(ExploitList.isIn(*Inst, LengthFunc[1])){
+      Value *dst = Caller->getArgOperand(0);
+      CallInst *LenFnCall = AfterBuilder.CreateCall(ChunkLenFnTT, {dst, len});
+    }
+    else if(ExploitList.isIn(*Inst, LengthFunc[2])){
+      Value *dst = Caller->getArgOperand(1);
+      CallInst *LenFnCall = AfterBuilder.CreateCall(ChunkLenFnTT, {dst, len});
+    }
   }
 
   

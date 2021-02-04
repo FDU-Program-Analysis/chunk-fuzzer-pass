@@ -22,6 +22,8 @@ fun:__chunk_trace_cmpfn_tt=custom
 fun:__chunk_trace_cmpfn_tt=uninstrumented
 fun:__chunk_trace_offsfn_tt=custom
 fun:__chunk_trace_offsfn_tt=uninstrumented
+fun:__chunk_trace_lenfn_tt=custom
+fun:__chunk_trace_lenfn_tt=uninstrumented
 
 # Trace-PC
 fun:__angora_trace_cmp=uninstrumented

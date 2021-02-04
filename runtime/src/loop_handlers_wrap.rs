@@ -193,8 +193,8 @@ pub extern "C" fn __chunk_trace_cmpfn_tt(
 pub extern "C" fn __dfsw___chunk_trace_cmpfn_tt(
     arg1: *const c_char,
     arg2: *const c_char,
-    l0: DfsanLabel,
-    l1: DfsanLabel,
+    _l0: DfsanLabel,
+    _l1: DfsanLabel,
 ) {
     let c1 = unsafe { CStr::from_ptr(arg1)};
     let str1: &str = c1.to_str().unwrap();
@@ -224,4 +224,26 @@ pub extern "C" fn __dfsw___chunk_trace_offsfn_tt(
     _l1: DfsanLabel,
 ) {
     println!("__chunk_trace_offsfn_tt : {0},{1},{2},{3}", index, op, l0, _l1);
+}
+
+#[no_mangle]
+pub extern "C" fn __chunk_trace_lenfn_tt(
+    _a: *mut i8,
+    _b: u32,
+) {
+    panic!("Forbid calling __chunk_trace_lenfn_tt directly");
+}
+
+#[no_mangle]
+pub extern "C" fn __dfsw___chunk_trace_lenfn_tt(
+    dst: *const c_char,
+    len: u32,
+    _l0: DfsanLabel,
+    l1: DfsanLabel,
+) {
+    let c = unsafe { CStr::from_ptr(dst)};
+    let c_str: &str = c.to_str().unwrap();
+    println!("{0} {1}", c_str, c_str.chars().count());
+    let lb = unsafe { dfsan_read_label(dst, c_str.chars().count()) };
+    println!("__chunk_trace_lenfn_tt : {0},{1},{2},{3}", c_str, len, lb, l1);
 }
