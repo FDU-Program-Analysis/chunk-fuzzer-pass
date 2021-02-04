@@ -18,6 +18,10 @@ fun:__chunk_trace_cmp_tt=uninstrumented
 fun:__chunk_trace_cmp_tt=custom
 fun:__chunk_trace_switch_tt=uninstrumented
 fun:__chunk_trace_switch_tt=custom
+fun:__chunk_trace_cmpfn_tt=custom
+fun:__chunk_trace_cmpfn_tt=uninstrumented
+fun:__chunk_trace_offsfn_tt=custom
+fun:__chunk_trace_offsfn_tt=uninstrumented
 
 # Trace-PC
 fun:__angora_trace_cmp=uninstrumented

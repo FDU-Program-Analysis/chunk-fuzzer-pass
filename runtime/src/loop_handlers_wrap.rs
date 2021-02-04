@@ -177,61 +177,51 @@ pub extern "C" fn __dfsw___chunk_trace_switch_tt(
     _l2: DfsanLabel,
     _l3: DfsanLabel,
 ) {
-    println!("__chunk_trace_switch_tt : {0},{1},{2},{3} ",size,condition,nums,args);
+    println!("__chunk_trace_switch_tt : {0},{1},{2}",size,condition,num);
 }
 
-/*
+
 #[no_mangle]
-pub extern "C" fn __chunk_trace_fn_tt(
-    _a: u32,
-    _b: u32,
-    _c: u32,
-    _d: *mut i8,
-    _e: *mut i8
+pub extern "C" fn __chunk_trace_cmpfn_tt(
+    _a: *mut i8,
+    _b: *mut i8
 ) {
-    panic!("Forbid calling __chunk_trace_fn_tt directly");
+    panic!("Forbid calling __chunk_trace_cmpfn_tt directly");
 }
 
 #[no_mangle]
-pub extern "C" fn __dfsw___chunk_trace_fn_tt(
-    cmpid: u32,
-    context: u32,
-    size: u32,
-    parg1: *mut i8,
-    parg2: *mut i8,
-    _l0: DfsanLabel,
-    _l1: DfsanLabel,
-    _l2: DfsanLabel,
-    _l3: DfsanLabel,
-    _l4: DfsanLabel,
+pub extern "C" fn __dfsw___chunk_trace_cmpfn_tt(
+    arg1: *const c_char,
+    arg2: *const c_char,
+    l0: DfsanLabel,
+    l1: DfsanLabel,
 ) {
+    let c1 = unsafe { CStr::from_ptr(arg1)};
+    let str1: &str = c1.to_str().unwrap();
+    println!("{0} {1}", str1, str1.chars().count());
+    let c2 = unsafe {CStr::from_ptr(arg2)};
+    let str2: &str = c2.to_str().unwrap();
+    println!("{0} {1}", str2, str2.chars().count());
+    let lb1 = unsafe { dfsan_read_label(arg1, str1.chars().count()) };
+    let lb2 = unsafe { dfsan_read_label(arg2, str2.chars().count()) };
+    println!("__chunk_trace_cmpfn_tt : {0},{1},{2},{3}", str1, str2, lb1, lb2);
     
 }
-*/
 
 #[no_mangle]
-pub extern "C" fn __chunk_trace_exploit_val_tt(
+pub extern "C" fn __chunk_trace_offsfn_tt(
     _a: u32,
     _b: u32,
-    _c: u32,
-    _d: u32,
-    _e: u64
 ) {
-    panic!("Forbid calling __chunk_trace_exploit_val_tt directly");
+    panic!("Forbid calling __chunk_trace_offsfn_tt directly");
 }
 
 #[no_mangle]
-pub extern "C" fn __dfsw___chunk_trace_exploit_val_tt(
-    cmpid: u32,
-    context: u32,
-    size: u32,
+pub extern "C" fn __dfsw___chunk_trace_offsfn_tt(
+    index: u32,
     op: u32,
-    val: u64,
-    _l0: DfsanLabel,
+    l0: DfsanLabel,
     _l1: DfsanLabel,
-    _l2: DfsanLabel,
-    _l3: DfsanLabel,
-    l4: DfsanLabel,
 ) {
-    
+    println!("__chunk_trace_offsfn_tt : {0},{1},{2},{3}", index, op, l0, _l1);
 }
