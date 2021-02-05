@@ -372,7 +372,7 @@ void LoopHandlingPass::initVariables(Function &F, Module &M) {
     ChunkSwTT = M.getOrInsertFunction("__chunk_trace_switch_tt", ChunkSwTtTy, AL);   
   }
 
-  Type *ChunkCmpFnTtArgs[2] = {Int8PtrTy, Int8PtrTy};
+  Type *ChunkCmpFnTtArgs[5] = {Int8PtrTy, Int8PtrTy, Int32Ty, Int8Ty, Int8Ty};
   ChunkCmpFnTtTy = FunctionType::get(VoidTy, ChunkCmpFnTtArgs, false);
   {
     AttributeList AL;
@@ -394,7 +394,7 @@ void LoopHandlingPass::initVariables(Function &F, Module &M) {
     ChunkOffsFnTT = M.getOrInsertFunction("__chunk_trace_offsfn_tt", ChunkOffsFnTtTy, AL);   
   }
   
-  Type *ChunkLenFnTtArgs[2] = {Int8PtrTy, Int32Ty};
+  Type *ChunkLenFnTtArgs[3] = {Int8PtrTy, Int32Ty, Int32Ty};
   ChunkLenFnTtTy = FunctionType::get(VoidTy, ChunkLenFnTtArgs, false);
   {
     AttributeList AL;
@@ -558,16 +558,23 @@ void LoopHandlingPass::visitExploitation(Instruction *Inst) {
   Instruction* AfterCall= Inst->getNextNonDebugInstruction();
   IRBuilder<> AfterBuilder(AfterCall);
   CallInst *Caller = dyn_cast<CallInst>(Inst);
-
+  
   if(ExploitList.isIn(*Inst, CompareFunc)) {
-    outs() << "strcmp inst\n";
     Value *OpArg[2];
     OpArg[0] = Caller->getArgOperand(0);
     OpArg[1] = Caller->getArgOperand(1);
     if (!OpArg[0]->getType()->isPointerTy() ||!OpArg[1]->getType()->isPointerTy()) return;
 
-    CallInst *CmpFnCall = AfterBuilder.CreateCall(ChunkCmpFnTT, {OpArg[0], OpArg[1]});
-    // 8 8
+    Value *ArgSize = NumZero;
+    if (Caller->getNumArgOperands() > 2) {
+      ArgSize = Caller->getArgOperand(2); // int32ty
+    }
+
+    Value *Const1 =  isa<Constant>(OpArg[0])? BoolTrue : BoolFalse;
+    Value *Const2 =  isa<Constant>(OpArg[1])? BoolTrue : BoolFalse;
+
+    CallInst *CmpFnCall = AfterBuilder.CreateCall(ChunkCmpFnTT, {OpArg[0], OpArg[1], ArgSize, Const1, Const2});
+
   } else if(ExploitList.isIn(*Inst,OffsetFunc)) {
     outs() << "fseek inst\n";
     Value *index = Caller->getArgOperand(1);
@@ -575,24 +582,21 @@ void LoopHandlingPass::visitExploitation(Instruction *Inst) {
 
     CallInst *OffsFnCall = AfterBuilder.CreateCall(ChunkOffsFnTT, {index, op});
     // 32 32
-  } else{
+  } else if(ExploitList.isIn(*Inst, LengthFunc[0])){
+    Value *dst = Caller->getArgOperand(0);
+    Value *len1 = Caller->getArgOperand(1);
+    Value *len2 = Caller->getArgOperand(2);
+    CallInst *LenFnCall = AfterBuilder.CreateCall(ChunkLenFnTT, {dst, len1, len2});
+  }else if(ExploitList.isIn(*Inst, LengthFunc[1]) || ExploitList.isIn(*Inst, LengthFunc[2])){
     Value *len = Caller->getArgOperand(2);
+
+    Value *dst;
     if(ExploitList.isIn(*Inst, LengthFunc[0])){
-      Value *dst = Caller->getArgOperand(0);
-      Value *len0 = Caller->getArgOperand(1);
-      CallInst *LenFnCall1 = AfterBuilder.CreateCall(ChunkLenFnTT, {dst, len});
-      CallInst *LenFnCall2 = AfterBuilder.CreateCall(ChunkLenFnTT, {dst, len0});
-      // 8 32
-    }
-    else if(ExploitList.isIn(*Inst, LengthFunc[1])){
-      outs() << "cmpfn1 instr\n" ;
-      Value *dst = Caller->getArgOperand(0);
-      CallInst *LenFnCall = AfterBuilder.CreateCall(ChunkLenFnTT, {dst, len});
-    }
-    else if(ExploitList.isIn(*Inst, LengthFunc[2])){
-      Value *dst = Caller->getArgOperand(1);
-      CallInst *LenFnCall = AfterBuilder.CreateCall(ChunkLenFnTT, {dst, len});
-    }
+      dst = Caller->getArgOperand(0);
+    } else dst = Caller->getArgOperand(1);
+    
+    CallInst *LenFnCall = AfterBuilder.CreateCall(ChunkLenFnTT, {dst, len, NumZero});
+    
   }
 
   

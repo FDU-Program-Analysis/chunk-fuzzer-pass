@@ -19,17 +19,19 @@ void offset_test(){
 void cmp_test(){
     char buf1[10];
     char buf2[10];
+    for(int i=0;i<10;i++){
+        buf1[i]='\0';
+        buf2[i]='\0';
+    }
     for(int i=0;i<3;i++){
         fread(buf1, sizeof(char),2,fp);
-        buf1[2]='\0';
         dfsan_label buffer1 = dfsan_read_label(buf1,sizeof(buf1));
         fread(buf2, sizeof(char),2,fp);
-        buf2[2]='\0';
         dfsan_label buffer2 = dfsan_read_label(buf2,sizeof(buf2));
         printf("%s %s\n",buf1,buf2);
         printf("%d %d\n",buffer1,buffer2);
         strcmp(buf1,"12");
-        strcmp(buf1,buf2);
+        strcmp("34",buf2);
     }
 }
 
@@ -102,7 +104,7 @@ int main()
 {
  	fp = fopen("file", "rb");
     
-    len2_test();
+    cmp_test();
 
     fclose(fp);
 	return 0;

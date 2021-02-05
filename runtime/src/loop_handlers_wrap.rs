@@ -5,6 +5,7 @@ use lazy_static::lazy_static;
 use std::{sync::Mutex};
 use std::ffi::CStr;
 use libc::c_char;
+use std::convert::TryFrom;
 
 // Lazy static doesn't have reference count and won't call drop after the program finish.
 // So, we should call drop manually.. see ***_fini.
@@ -184,27 +185,41 @@ pub extern "C" fn __dfsw___chunk_trace_switch_tt(
 #[no_mangle]
 pub extern "C" fn __chunk_trace_cmpfn_tt(
     _a: *mut i8,
-    _b: *mut i8
+    _b: *mut i8,
+    _c: u32,
+    _d: u32
 ) {
     panic!("Forbid calling __chunk_trace_cmpfn_tt directly");
 }
 
 #[no_mangle]
 pub extern "C" fn __dfsw___chunk_trace_cmpfn_tt(
-    arg1: *const c_char,
-    arg2: *const c_char,
+    arg1: *mut i8,
+    arg2: *mut i8,
+    len: u32,
+    cons1: bool,
+    cons2: bool,
     _l0: DfsanLabel,
     _l1: DfsanLabel,
+    _l2: DfsanLabel,
+    _l3: DfsanLabel,
+    _l4: DfsanLabel
 ) {
-    let c1 = unsafe { CStr::from_ptr(arg1)};
-    let str1: &str = c1.to_str().unwrap();
-    println!("{0} {1}", str1, str1.chars().count());
-    let c2 = unsafe {CStr::from_ptr(arg2)};
-    let str2: &str = c2.to_str().unwrap();
-    println!("{0} {1}", str2, str2.chars().count());
-    let lb1 = unsafe { dfsan_read_label(arg1, str1.chars().count()) };
-    let lb2 = unsafe { dfsan_read_label(arg2, str2.chars().count()) };
-    println!("__chunk_trace_cmpfn_tt : {0},{1},{2},{3}", str1, str2, lb1, lb2);
+    let (arglen1, arglen2) = if len == 0 {
+        unsafe { (libc::strlen(arg1) as usize, libc::strlen(arg2) as usize) }
+    } else {
+        (len as usize, len as usize)
+    };
+
+    println!("{0} {1}", arglen1, arglen2);
+    
+    let lb1 = unsafe { dfsan_read_label(arg1, arglen1) };
+    let lb2 = unsafe { dfsan_read_label(arg2, arglen2) };
+
+    if cons1^cons2 {
+        if cons1 {println!("__chunk_trace_cmpfn_tt : <{0},{1},enum> ", lb2, lb1);}
+        else if cons2 {println!("__chunk_trace_cmpfn_tt : <{0},{1},enum> ", lb1, lb2);}
+    }
     
 }
 
@@ -218,32 +233,48 @@ pub extern "C" fn __chunk_trace_offsfn_tt(
 
 #[no_mangle]
 pub extern "C" fn __dfsw___chunk_trace_offsfn_tt(
-    index: u32,
+    index: i32,
     op: u32,
     l0: DfsanLabel,
     _l1: DfsanLabel,
 ) {
-    println!("__chunk_trace_offsfn_tt : {0},{1},{2},{3}", index, op, l0, _l1);
+    // op用来指示相对or绝对 0 文件头 1 当前位置 2 文件尾
+    println!("__chunk_trace_offsfn_tt : <{0},{1}, offset>", l0, op);
 }
 
 #[no_mangle]
 pub extern "C" fn __chunk_trace_lenfn_tt(
     _a: *mut i8,
     _b: u32,
+    _c: u32,
 ) {
     panic!("Forbid calling __chunk_trace_lenfn_tt directly");
 }
 
 #[no_mangle]
 pub extern "C" fn __dfsw___chunk_trace_lenfn_tt(
-    dst: *const c_char,
-    len: u32,
+    dst: *mut i8,
+    len1: u32,
+    len2: u32,
     _l0: DfsanLabel,
     l1: DfsanLabel,
+    l2: DfsanLabel
 ) {
-    let c = unsafe { CStr::from_ptr(dst)};
-    let c_str: &str = c.to_str().unwrap();
-    println!("{0} {1}", c_str, c_str.chars().count());
-    let lb = unsafe { dfsan_read_label(dst, c_str.chars().count()) };
-    println!("__chunk_trace_lenfn_tt : {0},{1},{2},{3}", c_str, len, lb, l1);
+    println!("{0} {1}", len1,len2);
+    let len = if len2 == 0 {
+        len1 as usize
+    } else {
+        (len1*len2) as usize
+    };
+
+    let lb = unsafe { dfsan_read_label(dst,len) };
+    println!("lenfn_tt : {0},{1},{2},{3}", lb, len1, len2, len);
+
+    println!("__chunk_trace_lenfn_tt : <{0},{1},len>", lb, l1);
+
+    if len2!=0 {
+        println!("__chunk_trace_lenfn_tt : <{0},{1},len>", lb, l2);
+    }
+    
 }
+
