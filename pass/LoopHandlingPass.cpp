@@ -394,7 +394,7 @@ void LoopHandlingPass::initVariables(Function &F, Module &M) {
     ChunkOffsFnTT = M.getOrInsertFunction("__chunk_trace_offsfn_tt", ChunkOffsFnTtTy, AL);   
   }
   
-  Type *ChunkLenFnTtArgs[3] = {Int8PtrTy, Int32Ty, Int32Ty};
+  Type *ChunkLenFnTtArgs[6] = {Int8PtrTy, Int32Ty, Int32Ty, Int8Ty, Int8Ty, Int8Ty};
   ChunkLenFnTtTy = FunctionType::get(VoidTy, ChunkLenFnTtArgs, false);
   {
     AttributeList AL;
@@ -586,7 +586,12 @@ void LoopHandlingPass::visitExploitation(Instruction *Inst) {
     Value *dst = Caller->getArgOperand(0);
     Value *len1 = Caller->getArgOperand(1);
     Value *len2 = Caller->getArgOperand(2);
-    CallInst *LenFnCall = AfterBuilder.CreateCall(ChunkLenFnTT, {dst, len1, len2});
+
+    Value *Const1 =  isa<Constant>(dst)? BoolTrue : BoolFalse;
+    Value *Const2 =  isa<Constant>(len1)? BoolTrue : BoolFalse;
+    Value *Const3 =  isa<Constant>(len2)? BoolTrue : BoolFalse;
+
+    CallInst *LenFnCall = AfterBuilder.CreateCall(ChunkLenFnTT, {dst, len1, len2, Const1, Const2, Const3});
   }else if(ExploitList.isIn(*Inst, LengthFunc[1]) || ExploitList.isIn(*Inst, LengthFunc[2])){
     Value *len = Caller->getArgOperand(2);
 
@@ -594,8 +599,11 @@ void LoopHandlingPass::visitExploitation(Instruction *Inst) {
     if(ExploitList.isIn(*Inst, LengthFunc[0])){
       dst = Caller->getArgOperand(0);
     } else dst = Caller->getArgOperand(1);
+
+    Value *Const1 =  isa<Constant>(dst)? BoolTrue : BoolFalse;
+    Value *Const2 =  isa<Constant>(len)? BoolTrue : BoolFalse;
     
-    CallInst *LenFnCall = AfterBuilder.CreateCall(ChunkLenFnTT, {dst, len, NumZero});
+    CallInst *LenFnCall = AfterBuilder.CreateCall(ChunkLenFnTT, {dst, len, NumZero, Const1, Const2, BoolTrue});
     
   }
 

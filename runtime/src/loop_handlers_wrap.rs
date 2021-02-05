@@ -5,7 +5,6 @@ use lazy_static::lazy_static;
 use std::{sync::Mutex};
 use std::ffi::CStr;
 use libc::c_char;
-use std::convert::TryFrom;
 
 // Lazy static doesn't have reference count and won't call drop after the program finish.
 // So, we should call drop manually.. see ***_fini.
@@ -247,6 +246,9 @@ pub extern "C" fn __chunk_trace_lenfn_tt(
     _a: *mut i8,
     _b: u32,
     _c: u32,
+    _d: bool,
+    _e: bool,
+    _f: bool
 ) {
     panic!("Forbid calling __chunk_trace_lenfn_tt directly");
 }
@@ -256,11 +258,16 @@ pub extern "C" fn __dfsw___chunk_trace_lenfn_tt(
     dst: *mut i8,
     len1: u32,
     len2: u32,
+    dst_cons: bool,
+    len1_cons: bool,
+    len2_cons: bool,
     _l0: DfsanLabel,
     l1: DfsanLabel,
-    l2: DfsanLabel
+    l2: DfsanLabel,
+    _l3: DfsanLabel,
+    _l4: DfsanLabel,
+    _l5: DfsanLabel
 ) {
-    println!("{0} {1}", len1,len2);
     let len = if len2 == 0 {
         len1 as usize
     } else {
@@ -269,10 +276,13 @@ pub extern "C" fn __dfsw___chunk_trace_lenfn_tt(
 
     let lb = unsafe { dfsan_read_label(dst,len) };
     println!("lenfn_tt : {0},{1},{2},{3}", lb, len1, len2, len);
+    println!("cons: {0} {1} {2}", dst_cons,len1_cons,len2_cons);
 
-    println!("__chunk_trace_lenfn_tt : <{0},{1},len>", lb, l1);
+    if (!dst_cons) && (!len1_cons){
+        println!("__chunk_trace_lenfn_tt : <{0},{1},len>", lb, l1);
+    }
 
-    if len2!=0 {
+    if len2!=0 && (!dst_cons) && (!len2_cons) {
         println!("__chunk_trace_lenfn_tt : <{0},{1},len>", lb, l2);
     }
     
