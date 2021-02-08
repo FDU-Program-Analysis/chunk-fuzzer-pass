@@ -2,7 +2,7 @@ use super::*;
 use crate::{loop_handlers::ObjectStack};
 // use angora_common::{config, tag::TagSeg};
 use lazy_static::lazy_static;
-use std::{sync::Mutex};
+use std::{slice,sync::Mutex};
 use std::ffi::CStr;
 use libc::c_char;
 
@@ -190,6 +190,11 @@ pub extern "C" fn __dfsw___chunk_trace_switch_tt(
     _l4: DfsanLabel,
 ) {
     println!("__chunk_trace_switch_tt : {0},{1},{2},{3}",size,condition,num,is_loop);
+    let sw_args = unsafe { slice::from_raw_parts(args, num as usize) };
+
+    for (i, arg) in sw_args.iter().enumerate() {
+        println!("case {1} : {0}", i,arg);
+    }
 }
 
 
