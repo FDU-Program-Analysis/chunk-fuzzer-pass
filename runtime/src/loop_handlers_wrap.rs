@@ -35,7 +35,7 @@ pub extern "C" fn __dfsw___chunk_get_dump_label(
 
 #[no_mangle]
 pub extern "C" fn __chunk_push_new_obj(
-    _a: bool,
+    _a: u8,
     _b: u32,
     _c: u32,
 ) {
@@ -135,6 +135,9 @@ pub extern "C" fn __chunk_trace_cmp_tt(
     _c: u64,
     _d: u64,
     _e: u32,
+    _f: u8,
+    _g: u8,
+    _h: u8
 ) {
     panic!("Forbid calling __chunk_trace_cmp_tt directly");
 }
@@ -146,13 +149,19 @@ pub extern "C" fn __dfsw___chunk_trace_cmp_tt(
     arg1: u64,
     arg2: u64,
     condition: u32,
+    is_loop: u8,
+    is_cnst1: u8,
+    is_cnst2: u8,
     _l0: DfsanLabel,
     _l1: DfsanLabel,
     l2: DfsanLabel,
     l3: DfsanLabel,
     _l4: DfsanLabel,
+    _l5: DfsanLabel,
+    _l6: DfsanLabel,
+    _l7: DfsanLabel
 ) {
-    println!("__chunk_trace_cmp_tt : {0},{1},{2},{3},{4} ",size,op,arg1,arg2,condition);
+    println!("__chunk_trace_cmp_tt : {0},{1},{2},{3},{4},{5},{6},{7}",size,op,arg1,arg2,condition,is_loop,is_cnst1,is_cnst2);
 }
 
 #[no_mangle]
@@ -160,7 +169,8 @@ pub extern "C" fn __chunk_trace_switch_tt(
     _a: u32,
     _b: u64,
     _c: u32,
-    _d: *mut u64
+    // _d: *mut u64,
+    _e: u8
 ) {
     panic!("Forbid calling __chunk_trace_switch_tt directly");
 }
@@ -171,13 +181,15 @@ pub extern "C" fn __dfsw___chunk_trace_switch_tt(
     size: u32,
     condition: u64,
     num: u32,
-    args: *mut u64,
+    // args: *mut u64,
+    is_loop: u8,
     _l0: DfsanLabel,
     l1: DfsanLabel,
     _l2: DfsanLabel,
     _l3: DfsanLabel,
+    // _l4: DfsanLabel,
 ) {
-    println!("__chunk_trace_switch_tt : {0},{1},{2}",size,condition,num);
+    println!("__chunk_trace_switch_tt : {0},{1},{2},{3}",size,condition,num,is_loop);
 }
 
 
@@ -196,8 +208,8 @@ pub extern "C" fn __dfsw___chunk_trace_cmpfn_tt(
     arg1: *mut i8,
     arg2: *mut i8,
     len: u32,
-    cons1: bool,
-    cons2: bool,
+    is_cnst1: bool,
+    is_cnst2: bool,
     _l0: DfsanLabel,
     _l1: DfsanLabel,
     _l2: DfsanLabel,
@@ -215,9 +227,9 @@ pub extern "C" fn __dfsw___chunk_trace_cmpfn_tt(
     let lb1 = unsafe { dfsan_read_label(arg1, arglen1) };
     let lb2 = unsafe { dfsan_read_label(arg2, arglen2) };
 
-    if cons1^cons2 {
-        if cons1 {println!("__chunk_trace_cmpfn_tt : <{0},{1},enum> ", lb2, lb1);}
-        else if cons2 {println!("__chunk_trace_cmpfn_tt : <{0},{1},enum> ", lb1, lb2);}
+    if is_cnst1^is_cnst2 {
+        if is_cnst1 {println!("__chunk_trace_cmpfn_tt : <{0},{1},enum> ", lb2, lb1);}
+        else if is_cnst2 {println!("__chunk_trace_cmpfn_tt : <{0},{1},enum> ", lb1, lb2);}
     }
     
 }
@@ -226,6 +238,8 @@ pub extern "C" fn __dfsw___chunk_trace_cmpfn_tt(
 pub extern "C" fn __chunk_trace_offsfn_tt(
     _a: u32,
     _b: u32,
+    _c: u8,
+    _d: u8
 ) {
     panic!("Forbid calling __chunk_trace_offsfn_tt directly");
 }
@@ -234,11 +248,14 @@ pub extern "C" fn __chunk_trace_offsfn_tt(
 pub extern "C" fn __dfsw___chunk_trace_offsfn_tt(
     index: i32,
     op: u32,
+    is_cnst_idx: bool,
     l0: DfsanLabel,
     _l1: DfsanLabel,
+    _l2: DfsanLabel,
+    _l3: DfsanLabel
 ) {
     // op用来指示相对or绝对 0 文件头 1 当前位置 2 文件尾
-    println!("__chunk_trace_offsfn_tt : <{0},{1}, offset>", l0, op);
+    if(!is_cnst_idx) {println!("__chunk_trace_offsfn_tt : <{0},{1}, offset>", l0, op);}
 }
 
 #[no_mangle]
@@ -246,9 +263,9 @@ pub extern "C" fn __chunk_trace_lenfn_tt(
     _a: *mut i8,
     _b: u32,
     _c: u32,
-    _d: bool,
-    _e: bool,
-    _f: bool
+    _d: u8,
+    _e: u8,
+    _f: u8
 ) {
     panic!("Forbid calling __chunk_trace_lenfn_tt directly");
 }
@@ -258,9 +275,9 @@ pub extern "C" fn __dfsw___chunk_trace_lenfn_tt(
     dst: *mut i8,
     len1: u32,
     len2: u32,
-    dst_cons: bool,
-    len1_cons: bool,
-    len2_cons: bool,
+    is_cnst_dst: bool,
+    is_cnst_len1: bool,
+    is_cnst_len2: bool,
     _l0: DfsanLabel,
     l1: DfsanLabel,
     l2: DfsanLabel,
@@ -276,13 +293,13 @@ pub extern "C" fn __dfsw___chunk_trace_lenfn_tt(
 
     let lb = unsafe { dfsan_read_label(dst,len) };
     println!("lenfn_tt : {0},{1},{2},{3}", lb, len1, len2, len);
-    println!("cons: {0} {1} {2}", dst_cons,len1_cons,len2_cons);
+    println!("cons: {0} {1} {2}", is_cnst_dst,is_cnst_len1,is_cnst_len2);
 
-    if (!dst_cons) && (!len1_cons){
+    if (!is_cnst_dst) && (!is_cnst_len1){
         println!("__chunk_trace_lenfn_tt : <{0},{1},len>", lb, l1);
     }
 
-    if len2!=0 && (!dst_cons) && (!len2_cons) {
+    if len2!=0 && (!is_cnst_dst) && (!is_cnst_len2) {
         println!("__chunk_trace_lenfn_tt : <{0},{1},len>", lb, l2);
     }
     

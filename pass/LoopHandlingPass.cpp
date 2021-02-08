@@ -170,21 +170,22 @@ struct LoopHandlingPass : public LoopPass {
   u32 getLoopId(Function *F, Loop *L);
   u32 getFunctionId(Function *F);
   void setRandomNumSeed(u32 seed);
+  bool checkInHeader(BasicBlock *B, Instruction* Inst);
   void initVariables(Function &F, Module &M);
 
   Value *castArgType(IRBuilder<> &IRB, Value *V); //从angorapass里抄来的 setValueNotSan直接注释掉了
 
-  void visitCallInst(Instruction *Inst);
-  void visitInvokeInst(Instruction *Inst);
+  void visitCallInst(Instruction *Inst, bool loop);
+  void visitInvokeInst(Instruction *Inst, bool loop);
   void visitLoadInst(Instruction *Inst);
-  void visitBranchInst(Instruction *Inst);
-  void visitSwitchInst(Instruction *Inst);
-  void visitCmpInst(Instruction *Inst);
+  void visitBranchInst(Instruction *Inst, bool loop);
+  void visitSwitchInst(Instruction *Inst, bool loop);
+  void visitCmpInst(Instruction *Inst, bool loop);
   void visitExploitation(Instruction *Inst);
 
-  void processCmp(Instruction *Cond, Instruction *InsertPoint);
-  void processBoolCmp(Value *Cond, Instruction *InsertPoint);
-  void processCallInst(Instruction *Inst);
+  void processCmp(Instruction *Cond, Instruction *InsertPoint, bool loop);
+  void processBoolCmp(Value *Cond, Instruction *InsertPoint,bool loop);
+  void processCallInst(Instruction *Inst,bool loop);
   void processLoadInst(Instruction *Cond, Instruction *InsertPoint);
 
   void getAnalysisUsage(AnalysisUsage &AU) const {
@@ -350,7 +351,7 @@ void LoopHandlingPass::initVariables(Function &F, Module &M) {
     PopObjFn = M.getOrInsertFunction("__chunk_pop_obj", PopObjArgsTy, AL);   
   }
 
-  Type *ChunkCmpTtArgs[5] = {Int32Ty, Int32Ty, Int64Ty, Int64Ty, Int32Ty};
+  Type *ChunkCmpTtArgs[8] = {Int32Ty, Int32Ty, Int64Ty, Int64Ty, Int32Ty, Int8Ty, Int8Ty, Int8Ty};
   ChunkCmpTtTy = FunctionType::get(VoidTy, ChunkCmpTtArgs, false);
   {
     AttributeList AL;
@@ -361,7 +362,8 @@ void LoopHandlingPass::initVariables(Function &F, Module &M) {
     ChunkCmpTT = M.getOrInsertFunction("__chunk_trace_cmp_tt", ChunkCmpTtTy, AL);   
   }
   
-  Type *ChunkSwTtArgs[4] = {Int32Ty, Int64Ty, Int32Ty, Int64PtrTy};
+  //Int64PtrTy, 
+  Type *ChunkSwTtArgs[4] = {Int32Ty, Int64Ty, Int32Ty,Int8Ty};
   ChunkSwTtTy = FunctionType::get(VoidTy, ChunkSwTtArgs, false);
   {
     AttributeList AL;
@@ -383,7 +385,7 @@ void LoopHandlingPass::initVariables(Function &F, Module &M) {
     ChunkCmpFnTT = M.getOrInsertFunction("__chunk_trace_cmpfn_tt", ChunkCmpFnTtTy, AL);   
   }
 
-  Type *ChunkOffsFnTtArgs[2] = {Int32Ty, Int32Ty};
+  Type *ChunkOffsFnTtArgs[3] = {Int32Ty, Int32Ty, Int8Ty};
   ChunkOffsFnTtTy = FunctionType::get(VoidTy, ChunkOffsFnTtArgs, false);
   {
     AttributeList AL;
@@ -448,7 +450,7 @@ Value *LoopHandlingPass::castArgType(IRBuilder<> &IRB, Value *V) {
   return NV;
 }
 
-void LoopHandlingPass::visitCallInst(Instruction *Inst) {
+void LoopHandlingPass::visitCallInst(Instruction *Inst, bool loop) {
 
   CallInst *Caller = dyn_cast<CallInst>(Inst);
   Function *Callee = Caller->getCalledFunction();
@@ -460,10 +462,10 @@ void LoopHandlingPass::visitCallInst(Instruction *Inst) {
   }
 
   // instrument before CALL
-  processCallInst(Inst);
+  processCallInst(Inst, loop);
 };
 
-void LoopHandlingPass::visitInvokeInst(Instruction *Inst) {
+void LoopHandlingPass::visitInvokeInst(Instruction *Inst, bool loop) {
 
   InvokeInst *Caller = dyn_cast<InvokeInst>(Inst);
   Function *Callee = Caller->getCalledFunction();
@@ -476,7 +478,7 @@ void LoopHandlingPass::visitInvokeInst(Instruction *Inst) {
   }
 
   // instrument before INVOKE
-  processCallInst(Inst);
+  processCallInst(Inst, loop);
 }
 
 void LoopHandlingPass::visitLoadInst(Instruction *Inst) {
@@ -488,7 +490,7 @@ void LoopHandlingPass::visitLoadInst(Instruction *Inst) {
   processLoadInst(Inst, InsertPoint);
 }
 
-void LoopHandlingPass::visitBranchInst(Instruction *Inst) {
+void LoopHandlingPass::visitBranchInst(Instruction *Inst, bool loop) {
   BranchInst *Br = dyn_cast<BranchInst>(Inst);
 
   outs() << "Branch: " << *Br << "\t" << Br->getOpcode() << "\n";
@@ -499,13 +501,13 @@ void LoopHandlingPass::visitBranchInst(Instruction *Inst) {
     if (Cond && Cond->getType()->isIntegerTy() && !isa<ConstantInt>(Cond)) {
       if (!isa<CmpInst>(Cond)) {
         // From  and, or, call, phi ....
-        processBoolCmp(Cond, Inst);
+        processBoolCmp(Cond, Inst, loop);
       }
     }
   }
 }
 
-void LoopHandlingPass::visitSwitchInst(Instruction *Inst) {
+void LoopHandlingPass::visitSwitchInst(Instruction *Inst, bool loop) {
 
   SwitchInst *Sw = dyn_cast<SwitchInst>(Inst);
   Value *Cond = Sw->getCondition();
@@ -532,24 +534,28 @@ void LoopHandlingPass::visitSwitchInst(Instruction *Inst) {
     ArgList.push_back(ConstantExpr::getCast(CastInst::ZExt, C, Int64Ty));
   }
 
-  ArrayType *ArrayOfInt64Ty = ArrayType::get(Int64Ty, ArgList.size());
-  GlobalVariable *ArgGV = new GlobalVariable(
-      ArrayOfInt64Ty, false, GlobalVariable::InternalLinkage,
-      ConstantArray::get(ArrayOfInt64Ty, ArgList),
-      "__chunk_switch_arg_values");
+  // ArrayType *ArrayOfInt64Ty = ArrayType::get(Int64Ty, ArgList.size());
+  // GlobalVariable *ArgGV = new GlobalVariable(
+  //     ArrayOfInt64Ty, false, GlobalVariable::InternalLinkage,
+  //     ConstantArray::get(ArrayOfInt64Ty, ArgList),
+  //     "__chunk_switch_arg_values");
   Value *SwNum = ConstantInt::get(Int32Ty, ArgList.size());
-  Value *ArrPtr = IRB.CreatePointerCast(ArgGV, Int64PtrTy);
+  // Value *ArrPtr = IRB.CreatePointerCast(ArgGV, Int64PtrTy);
   Value *CondExt = IRB.CreateZExt(Cond, Int64Ty);
+  Value *is_loop =  loop? BoolTrue : BoolFalse;
+
   CallInst *ProxyCall = IRB.CreateCall(
-      ChunkSwTT, {SizeArg, CondExt, SwNum, ArrPtr});
+      // ChunkSwTT, {SizeArg, CondExt, SwNum, ArrPtr, is_loop});
+      ChunkSwTT, {SizeArg, CondExt, SwNum, is_loop});
+
 }
 
-void LoopHandlingPass::visitCmpInst(Instruction *Inst) {
+void LoopHandlingPass::visitCmpInst(Instruction *Inst, bool is_loop) {
   Instruction *InsertPoint = Inst->getNextNode();
   if (!InsertPoint || isa<ConstantInt>(Inst))
     return;
-  // Constant *Cid = ConstantInt::get(Int32Ty, getInstructionId(Inst));
-  processCmp(Inst, InsertPoint);
+
+  processCmp(Inst, InsertPoint,is_loop);
 }
 
 // TODO
@@ -570,28 +576,30 @@ void LoopHandlingPass::visitExploitation(Instruction *Inst) {
       ArgSize = Caller->getArgOperand(2); // int32ty
     }
 
-    Value *Const1 =  isa<Constant>(OpArg[0])? BoolTrue : BoolFalse;
-    Value *Const2 =  isa<Constant>(OpArg[1])? BoolTrue : BoolFalse;
+    Value *is_cnst1 =  isa<Constant>(OpArg[0])? BoolTrue : BoolFalse;
+    Value *is_cnst2 =  isa<Constant>(OpArg[1])? BoolTrue : BoolFalse;
 
-    CallInst *CmpFnCall = AfterBuilder.CreateCall(ChunkCmpFnTT, {OpArg[0], OpArg[1], ArgSize, Const1, Const2});
+    CallInst *CmpFnCall = AfterBuilder.CreateCall(ChunkCmpFnTT, {OpArg[0], OpArg[1], ArgSize, is_cnst1, is_cnst2});
 
   } else if(ExploitList.isIn(*Inst,OffsetFunc)) {
     outs() << "fseek inst\n";
     Value *index = Caller->getArgOperand(1);
     Value *op = Caller->getArgOperand(2);
 
-    CallInst *OffsFnCall = AfterBuilder.CreateCall(ChunkOffsFnTT, {index, op});
-    // 32 32
+    Value *is_cnst_idx =  isa<Constant>(index)? BoolTrue : BoolFalse;
+
+    CallInst *OffsFnCall = AfterBuilder.CreateCall(ChunkOffsFnTT, {index, op, is_cnst_idx});
+    
   } else if(ExploitList.isIn(*Inst, LengthFunc[0])){
     Value *dst = Caller->getArgOperand(0);
     Value *len1 = Caller->getArgOperand(1);
     Value *len2 = Caller->getArgOperand(2);
 
-    Value *Const1 =  isa<Constant>(dst)? BoolTrue : BoolFalse;
-    Value *Const2 =  isa<Constant>(len1)? BoolTrue : BoolFalse;
-    Value *Const3 =  isa<Constant>(len2)? BoolTrue : BoolFalse;
+    Value *is_cnst_dst =  isa<Constant>(dst)? BoolTrue : BoolFalse;
+    Value *is_cnst_l1 =  isa<Constant>(len1)? BoolTrue : BoolFalse;
+    Value *is_cnst_l2 =  isa<Constant>(len2)? BoolTrue : BoolFalse;
 
-    CallInst *LenFnCall = AfterBuilder.CreateCall(ChunkLenFnTT, {dst, len1, len2, Const1, Const2, Const3});
+    CallInst *LenFnCall = AfterBuilder.CreateCall(ChunkLenFnTT, {dst, len1, len2, is_cnst_dst, is_cnst_l1, is_cnst_l2});
   }else if(ExploitList.isIn(*Inst, LengthFunc[1]) || ExploitList.isIn(*Inst, LengthFunc[2])){
     Value *len = Caller->getArgOperand(2);
 
@@ -600,10 +608,10 @@ void LoopHandlingPass::visitExploitation(Instruction *Inst) {
       dst = Caller->getArgOperand(0);
     } else dst = Caller->getArgOperand(1);
 
-    Value *Const1 =  isa<Constant>(dst)? BoolTrue : BoolFalse;
-    Value *Const2 =  isa<Constant>(len)? BoolTrue : BoolFalse;
+    Value *is_cnst_dst =  isa<Constant>(dst)? BoolTrue : BoolFalse;
+    Value *is_cnst_l1 =  isa<Constant>(len)? BoolTrue : BoolFalse;
     
-    CallInst *LenFnCall = AfterBuilder.CreateCall(ChunkLenFnTT, {dst, len, NumZero, Const1, Const2, BoolTrue});
+    CallInst *LenFnCall = AfterBuilder.CreateCall(ChunkLenFnTT, {dst, len, NumZero, is_cnst_dst, is_cnst_l1, BoolTrue});
     
   }
 
@@ -611,19 +619,24 @@ void LoopHandlingPass::visitExploitation(Instruction *Inst) {
 }
 
 
-void LoopHandlingPass::processCmp(Instruction *Cond, Instruction *InsertPoint) {
+void LoopHandlingPass::processCmp(Instruction *Cond, Instruction *InsertPoint, bool loop) {
   CmpInst *Cmp = dyn_cast<CmpInst>(Cond);
 
   Value *OpArg[2];
   OpArg[0] = Cmp->getOperand(0);
   OpArg[1] = Cmp->getOperand(1);
+  Value *is_cnst1 =  isa<Constant>(OpArg[0])? BoolTrue : BoolFalse;
+  Value *is_cnst2 =  isa<Constant>(OpArg[1])? BoolTrue : BoolFalse;
+  Value *is_loop =  loop? BoolTrue : BoolFalse;
+
   Type *OpType = OpArg[0]->getType();
   outs() << "Compare: " << *Cmp << "\t" << OpType->getTypeID() << "\t" << OpArg[1]->getType()->getTypeID() << "\n";
   if (!((OpType->isIntegerTy() && OpType->getIntegerBitWidth() <= 64) ||
         OpType->isFloatTy() || OpType->isDoubleTy() || OpType->isPointerTy())) {
-    processBoolCmp(Cond,InsertPoint);
+    processBoolCmp(Cond,InsertPoint, loop);
     return;
   }
+
   int num_bytes = OpType->getScalarSizeInBits() / 8;
   if (num_bytes == 0) {
     if (OpType->isPointerTy()) {
@@ -632,8 +645,8 @@ void LoopHandlingPass::processCmp(Instruction *Cond, Instruction *InsertPoint) {
       return;
     }
   }
-
   Value *SizeArg = ConstantInt::get(Int32Ty, num_bytes);
+
   u32 predicate = Cmp->getPredicate();
   if (ConstantInt *CInt = dyn_cast<ConstantInt>(OpArg[1])) {
     if (CInt->isNegative()) {
@@ -650,11 +663,11 @@ void LoopHandlingPass::processCmp(Instruction *Cond, Instruction *InsertPoint) {
   OpArg[1] = castArgType(IRB, OpArg[1]);
   outs() << "insert ChunkCmpTT\n";
   CallInst *ProxyCall =
-      IRB.CreateCall(ChunkCmpTT, {SizeArg, TypeArg, OpArg[0], OpArg[1], CondExt});
+      IRB.CreateCall(ChunkCmpTT, {SizeArg, TypeArg, OpArg[0], OpArg[1], CondExt, is_loop, is_cnst1, is_cnst2});
 }
 
 
-void LoopHandlingPass::processBoolCmp(Value *Cond, Instruction *InsertPoint) {
+void LoopHandlingPass::processBoolCmp(Value *Cond, Instruction *InsertPoint, bool loop) {
   if (!Cond->getType()->isIntegerTy() || Cond->getType()->getIntegerBitWidth() > 32) return;
 
   Value *OpArg[2];
@@ -667,13 +680,18 @@ void LoopHandlingPass::processBoolCmp(Value *Cond, Instruction *InsertPoint) {
   IRBuilder<> IRB(InsertPoint);
   Value *CondExt = IRB.CreateZExt(Cond, Int32Ty);
   OpArg[0] = IRB.CreateZExt(CondExt, Int64Ty);
+
+  Value *is_cnst1 =  isa<Constant>(OpArg[0])? BoolTrue : BoolFalse;
+  Value *is_cnst2 =  isa<Constant>(OpArg[1])? BoolTrue : BoolFalse;
+  Value *is_loop =  loop? BoolTrue : BoolFalse;
+
   CallInst *ProxyCall =
-      IRB.CreateCall(ChunkCmpTT, {SizeArg, TypeArg, OpArg[0], OpArg[1], CondExt});
+      IRB.CreateCall(ChunkCmpTT, {SizeArg, TypeArg, OpArg[0], OpArg[1], CondExt, is_loop, is_cnst1, is_cnst2});
   
 }
 
 
-void LoopHandlingPass::processCallInst(Instruction *Inst) {
+void LoopHandlingPass::processCallInst(Instruction *Inst, bool is_loop) {
   CallInst *Caller = dyn_cast<CallInst>(Inst);
   Function *Func = Caller->getCalledFunction();
   u32 hFunc = getFunctionId(Func);
@@ -717,17 +735,17 @@ void LoopHandlingPass::processCallInst(Instruction *Inst) {
     if (skip_bb_set.find(&BB) == skip_bb_set.end()) {
       for (auto &Inst : BB) {
         if (isa<CallInst>(&Inst)) 
-          visitCallInst(&Inst);
+          visitCallInst(&Inst, is_loop);
         else if (isa<InvokeInst>(&Inst)) 
-          visitInvokeInst(&Inst);
+          visitInvokeInst(&Inst, is_loop);
         else if (isa<LoadInst>(&Inst)) {
           visitLoadInst(&Inst);
         } else if (isa<BranchInst>(&Inst)) {
-          visitBranchInst(&Inst);
+          visitBranchInst(&Inst, is_loop);
         } else if (isa<SwitchInst>(&Inst)) {
-          // visitSwitchInst(&Inst);
+          visitSwitchInst(&Inst, is_loop);
         } else if (isa<CmpInst>(&Inst)) {
-          visitCmpInst(&Inst);
+          visitCmpInst(&Inst, is_loop);
         }
       }
     }
@@ -755,6 +773,19 @@ void LoopHandlingPass::processLoadInst(Instruction *Inst, Instruction *InsertPoi
   
 }
 
+bool LoopHandlingPass::checkInHeader(BasicBlock *B, Instruction* Inst){
+  for(BasicBlock::iterator it = B->begin();it!=B->end();++it){
+    // outs() << *Inst << "\n";
+    // outs() << *it << '\n';
+    if(it->isIdenticalTo(Inst)) {
+      // outs() <<"found" << "\n";
+      return true;
+    }
+  }
+  // outs() << "not found\n";
+  return false;
+}
+
 
 bool LoopHandlingPass::runOnLoop(Loop * L, LPPassManager &LPM) {
 
@@ -767,6 +798,13 @@ bool LoopHandlingPass::runOnLoop(Loop * L, LPPassManager &LPM) {
   }
 
   Function &F = *L->getHeader()->getParent();
+
+  BasicBlock *header = L->getHeader();
+  // for(BasicBlock::iterator it = header->begin();it!=header->end();++it){
+  //     outs() << *it << '\n';
+  // }
+  // outs() << "end of header\n" ;
+
   Module &M = *L->getHeader()->getModule();
   auto &CTX = F.getContext();
   initVariables(F, M);
@@ -798,18 +836,21 @@ bool LoopHandlingPass::runOnLoop(Loop * L, LPPassManager &LPM) {
   if (!(isChildLoop || isInstrumented)) {
     for (BasicBlock *BB : L->getBlocks()) {
       for (auto &Inst : *BB) {
+        bool is_loop = checkInHeader(header,&Inst);
+        // outs() << Inst << "\n";
+        // outs() << "inheader: " << is_loop << "\n";
         if (isa<CallInst>(&Inst)) 
-            visitCallInst(&Inst);
+            visitCallInst(&Inst, is_loop);
         else if (isa<InvokeInst>(&Inst)) 
-            visitInvokeInst(&Inst);
+            visitInvokeInst(&Inst, is_loop);
         else if (isa<LoadInst>(&Inst)) 
             visitLoadInst(&Inst);
         else if (isa<BranchInst>(&Inst)) {
-          visitBranchInst(&Inst);
+          visitBranchInst(&Inst, is_loop);
         } else if (isa<SwitchInst>(&Inst)) {
-          // visitSwitchInst(&Inst);
+          visitSwitchInst(&Inst,is_loop);
         } else if (isa<CmpInst>(&Inst)) {
-          visitCmpInst(&Inst);
+          visitCmpInst(&Inst,is_loop);
         }
       }
     }
@@ -854,18 +895,20 @@ bool LoopHandlingPass::runOnLoop(Loop * L, LPPassManager &LPM) {
         ExitI = &*i;
       }
       for (auto &Inst : *BB) {
+        bool is_loop = checkInHeader(header,&Inst);
+        outs() << "inheader: " << is_loop << "\n";
         if (isa<CallInst>(&Inst)) {
-          visitCallInst(&Inst);
+          visitCallInst(&Inst, is_loop);
         }else if (isa<InvokeInst>(&Inst)) {
-          visitInvokeInst(&Inst);
+          visitInvokeInst(&Inst, is_loop);
         }else if (isa<LoadInst>(&Inst)) {
           visitLoadInst(&Inst);
         } else if (isa<BranchInst>(&Inst)) {
-          visitBranchInst(&Inst);
+          visitBranchInst(&Inst, is_loop);
         } else if (isa<SwitchInst>(&Inst)) {
-          // visitSwitchInst(&Inst);
+          visitSwitchInst(&Inst, is_loop);
         } else if (isa<CmpInst>(&Inst)) {
-          visitCmpInst(&Inst);
+          visitCmpInst(&Inst, is_loop);
         }
       }
     }
