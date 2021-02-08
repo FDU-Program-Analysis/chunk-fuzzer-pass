@@ -175,17 +175,17 @@ struct LoopHandlingPass : public LoopPass {
 
   Value *castArgType(IRBuilder<> &IRB, Value *V); //从angorapass里抄来的 setValueNotSan直接注释掉了
 
-  void visitCallInst(Instruction *Inst, bool loop);
-  void visitInvokeInst(Instruction *Inst, bool loop);
+  void visitCallInst(Module &M, Instruction *Inst, bool loop);
+  void visitInvokeInst(Module &M, Instruction *Inst, bool loop);
   void visitLoadInst(Instruction *Inst);
   void visitBranchInst(Instruction *Inst, bool loop);
-  void visitSwitchInst(Instruction *Inst, bool loop);
+  void visitSwitchInst(Module &M, Instruction *Inst, bool loop);
   void visitCmpInst(Instruction *Inst, bool loop);
   void visitExploitation(Instruction *Inst);
 
   void processCmp(Instruction *Cond, Instruction *InsertPoint, bool loop);
   void processBoolCmp(Value *Cond, Instruction *InsertPoint,bool loop);
-  void processCallInst(Instruction *Inst,bool loop);
+  void processCallInst(Module &M, Instruction *Inst,bool loop);
   void processLoadInst(Instruction *Cond, Instruction *InsertPoint);
 
   void getAnalysisUsage(AnalysisUsage &AU) const {
@@ -362,7 +362,7 @@ void LoopHandlingPass::initVariables(Function &F, Module &M) {
     ChunkCmpTT = M.getOrInsertFunction("__chunk_trace_cmp_tt", ChunkCmpTtTy, AL);   
   }
   
-  //Int64PtrTy, 
+  //Int64PtrTy,
   Type *ChunkSwTtArgs[4] = {Int32Ty, Int64Ty, Int32Ty,Int8Ty};
   ChunkSwTtTy = FunctionType::get(VoidTy, ChunkSwTtArgs, false);
   {
@@ -450,7 +450,7 @@ Value *LoopHandlingPass::castArgType(IRBuilder<> &IRB, Value *V) {
   return NV;
 }
 
-void LoopHandlingPass::visitCallInst(Instruction *Inst, bool loop) {
+void LoopHandlingPass::visitCallInst(Module &M, Instruction *Inst, bool loop) {
 
   CallInst *Caller = dyn_cast<CallInst>(Inst);
   Function *Callee = Caller->getCalledFunction();
@@ -462,10 +462,10 @@ void LoopHandlingPass::visitCallInst(Instruction *Inst, bool loop) {
   }
 
   // instrument before CALL
-  processCallInst(Inst, loop);
+  processCallInst(M, Inst, loop);
 };
 
-void LoopHandlingPass::visitInvokeInst(Instruction *Inst, bool loop) {
+void LoopHandlingPass::visitInvokeInst(Module &M, Instruction *Inst, bool loop) {
 
   InvokeInst *Caller = dyn_cast<InvokeInst>(Inst);
   Function *Callee = Caller->getCalledFunction();
@@ -478,7 +478,7 @@ void LoopHandlingPass::visitInvokeInst(Instruction *Inst, bool loop) {
   }
 
   // instrument before INVOKE
-  processCallInst(Inst, loop);
+  processCallInst(M, Inst, loop);
 }
 
 void LoopHandlingPass::visitLoadInst(Instruction *Inst) {
@@ -507,7 +507,7 @@ void LoopHandlingPass::visitBranchInst(Instruction *Inst, bool loop) {
   }
 }
 
-void LoopHandlingPass::visitSwitchInst(Instruction *Inst, bool loop) {
+void LoopHandlingPass::visitSwitchInst(Module &M, Instruction *Inst, bool loop) {
 
   SwitchInst *Sw = dyn_cast<SwitchInst>(Inst);
   Value *Cond = Sw->getCondition();
@@ -534,19 +534,20 @@ void LoopHandlingPass::visitSwitchInst(Instruction *Inst, bool loop) {
     ArgList.push_back(ConstantExpr::getCast(CastInst::ZExt, C, Int64Ty));
   }
 
-  // ArrayType *ArrayOfInt64Ty = ArrayType::get(Int64Ty, ArgList.size());
-  // GlobalVariable *ArgGV = new GlobalVariable(
-  //     ArrayOfInt64Ty, false, GlobalVariable::InternalLinkage,
-  //     ConstantArray::get(ArrayOfInt64Ty, ArgList),
-  //     "__chunk_switch_arg_values");
+  // need to fix
+  ArrayType *ArrayOfInt64Ty = ArrayType::get(Int64Ty, ArgList.size());
+  GlobalVariable *ArgGV = new GlobalVariable( 
+      M, ArrayOfInt64Ty, false, GlobalVariable::InternalLinkage,
+      ConstantArray::get(ArrayOfInt64Ty, ArgList),
+      "__chunk_switch_arg_values");
+  Value *ArrPtr = IRB.CreatePointerCast(ArgGV, Int64PtrTy);
+
   Value *SwNum = ConstantInt::get(Int32Ty, ArgList.size());
-  // Value *ArrPtr = IRB.CreatePointerCast(ArgGV, Int64PtrTy);
   Value *CondExt = IRB.CreateZExt(Cond, Int64Ty);
   Value *is_loop =  loop? BoolTrue : BoolFalse;
 
   CallInst *ProxyCall = IRB.CreateCall(
-      // ChunkSwTT, {SizeArg, CondExt, SwNum, ArrPtr, is_loop});
-      ChunkSwTT, {SizeArg, CondExt, SwNum, is_loop});
+      ChunkSwTT, {SizeArg, CondExt, SwNum, ArrPtr, is_loop});
 
 }
 
@@ -691,7 +692,7 @@ void LoopHandlingPass::processBoolCmp(Value *Cond, Instruction *InsertPoint, boo
 }
 
 
-void LoopHandlingPass::processCallInst(Instruction *Inst, bool is_loop) {
+void LoopHandlingPass::processCallInst(Module &M, Instruction *Inst, bool is_loop) {
   CallInst *Caller = dyn_cast<CallInst>(Inst);
   Function *Func = Caller->getCalledFunction();
   u32 hFunc = getFunctionId(Func);
@@ -735,15 +736,15 @@ void LoopHandlingPass::processCallInst(Instruction *Inst, bool is_loop) {
     if (skip_bb_set.find(&BB) == skip_bb_set.end()) {
       for (auto &Inst : BB) {
         if (isa<CallInst>(&Inst)) 
-          visitCallInst(&Inst, is_loop);
+          visitCallInst(M, &Inst, is_loop);
         else if (isa<InvokeInst>(&Inst)) 
-          visitInvokeInst(&Inst, is_loop);
+          visitInvokeInst(M, &Inst, is_loop);
         else if (isa<LoadInst>(&Inst)) {
           visitLoadInst(&Inst);
         } else if (isa<BranchInst>(&Inst)) {
           visitBranchInst(&Inst, is_loop);
         } else if (isa<SwitchInst>(&Inst)) {
-          visitSwitchInst(&Inst, is_loop);
+          visitSwitchInst(M, &Inst, is_loop);
         } else if (isa<CmpInst>(&Inst)) {
           visitCmpInst(&Inst, is_loop);
         }
@@ -840,15 +841,15 @@ bool LoopHandlingPass::runOnLoop(Loop * L, LPPassManager &LPM) {
         // outs() << Inst << "\n";
         // outs() << "inheader: " << is_loop << "\n";
         if (isa<CallInst>(&Inst)) 
-            visitCallInst(&Inst, is_loop);
+            visitCallInst(M, &Inst, is_loop);
         else if (isa<InvokeInst>(&Inst)) 
-            visitInvokeInst(&Inst, is_loop);
+            visitInvokeInst(M, &Inst, is_loop);
         else if (isa<LoadInst>(&Inst)) 
             visitLoadInst(&Inst);
         else if (isa<BranchInst>(&Inst)) {
           visitBranchInst(&Inst, is_loop);
         } else if (isa<SwitchInst>(&Inst)) {
-          visitSwitchInst(&Inst,is_loop);
+          visitSwitchInst(M,&Inst,is_loop);
         } else if (isa<CmpInst>(&Inst)) {
           visitCmpInst(&Inst,is_loop);
         }
@@ -898,15 +899,15 @@ bool LoopHandlingPass::runOnLoop(Loop * L, LPPassManager &LPM) {
         bool is_loop = checkInHeader(header,&Inst);
         outs() << "inheader: " << is_loop << "\n";
         if (isa<CallInst>(&Inst)) {
-          visitCallInst(&Inst, is_loop);
+          visitCallInst(M, &Inst, is_loop);
         }else if (isa<InvokeInst>(&Inst)) {
-          visitInvokeInst(&Inst, is_loop);
+          visitInvokeInst(M, &Inst, is_loop);
         }else if (isa<LoadInst>(&Inst)) {
           visitLoadInst(&Inst);
         } else if (isa<BranchInst>(&Inst)) {
           visitBranchInst(&Inst, is_loop);
         } else if (isa<SwitchInst>(&Inst)) {
-          visitSwitchInst(&Inst, is_loop);
+          visitSwitchInst(M, &Inst, is_loop);
         } else if (isa<CmpInst>(&Inst)) {
           visitCmpInst(&Inst, is_loop);
         }

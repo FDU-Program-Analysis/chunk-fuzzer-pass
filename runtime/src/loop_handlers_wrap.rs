@@ -169,7 +169,7 @@ pub extern "C" fn __chunk_trace_switch_tt(
     _a: u32,
     _b: u64,
     _c: u32,
-    // _d: *mut u64,
+    _d: *mut u64,
     _e: u8
 ) {
     panic!("Forbid calling __chunk_trace_switch_tt directly");
@@ -181,13 +181,13 @@ pub extern "C" fn __dfsw___chunk_trace_switch_tt(
     size: u32,
     condition: u64,
     num: u32,
-    // args: *mut u64,
+    args: *mut u64,
     is_loop: u8,
     _l0: DfsanLabel,
     l1: DfsanLabel,
     _l2: DfsanLabel,
     _l3: DfsanLabel,
-    // _l4: DfsanLabel,
+    _l4: DfsanLabel,
 ) {
     println!("__chunk_trace_switch_tt : {0},{1},{2},{3}",size,condition,num,is_loop);
 }
