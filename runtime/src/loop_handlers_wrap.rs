@@ -357,65 +357,6 @@ pub extern "C" fn __dfsw___chunk_trace_lenfn_tt(
 
 }
 
-#[no_mangle]
-pub extern "C" fn __dfsw___chunk_trace_offsfn_tt(
-    index: i32,
-    op: u32,
-    is_cnst_idx: bool,
-    l0: DfsanLabel,
-    _l1: DfsanLabel,
-    _l2: DfsanLabel,
-    _l3: DfsanLabel
-) {
-    // op用来指示相对or绝对 0 文件头 1 当前位置 2 文件尾
-    if(!is_cnst_idx) {println!("__chunk_trace_offsfn_tt : <{0},{1}, offset>", l0, op);}
-}
-
-#[no_mangle]
-pub extern "C" fn __chunk_trace_lenfn_tt(
-    _a: *mut i8,
-    _b: u32,
-    _c: u32,
-    _d: u8,
-    _e: u8,
-    _f: u8
-) {
-    panic!("Forbid calling __chunk_trace_lenfn_tt directly");
-}
-
-#[no_mangle]
-pub extern "C" fn __dfsw___chunk_trace_lenfn_tt(
-    dst: *mut i8,
-    len1: u32,
-    len2: u32,
-    is_cnst_dst: bool,
-    is_cnst_len1: bool,
-    is_cnst_len2: bool,
-    _l0: DfsanLabel,
-    l1: DfsanLabel,
-    l2: DfsanLabel,
-    _l3: DfsanLabel,
-    _l4: DfsanLabel,
-    _l5: DfsanLabel
-) {
-    let len = if len2 == 0 {
-        len1 as usize
-    } else {
-        (len1*len2) as usize
-    };
-
-    let lb = unsafe { dfsan_read_label(dst,len) };
-    println!("lenfn_tt : {0},{1},{2},{3}", lb, len1, len2, len);
-    println!("cons: {0} {1} {2}", is_cnst_dst,is_cnst_len1,is_cnst_len2);
-
-    if (!is_cnst_dst) && (!is_cnst_len1){
-        println!("__chunk_trace_lenfn_tt : <{0},{1},len>", lb, l1);
-    }
-
-    if len2!=0 && (!is_cnst_dst) && (!is_cnst_len2) {
-        println!("__chunk_trace_lenfn_tt : <{0},{1},len>", lb, l2);
-    }
-    
 fn infer_eq_sign(op: u32, lb1: u32, lb2: u32) -> u32 {
     if op == defs::COND_ICMP_EQ_OP
         && ((lb1 > 0 && tag_set_wrap::tag_set_get_sign(lb1 as usize))
