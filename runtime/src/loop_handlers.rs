@@ -261,7 +261,11 @@ impl ObjectStack {
         if !loop_handlers::ObjectStack::access_check(lb as u64) {
             return;
         }
+<<<<<<< HEAD
         tag_set_wrap::__angora_tag_set_infer_shape_in_math_op(lb, size as u32);
+=======
+        tag_set_wrap::__angora_tag_set_infer_shape_in_math_op(lb, size);
+>>>>>>> f729063d75e66deb2986510563048851d1006871
         let mut set_list = tag_set_wrap::tag_set_find(lb as usize);
 
         if set_list.len() > 0 {
