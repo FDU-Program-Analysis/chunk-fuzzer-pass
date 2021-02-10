@@ -1,7 +1,7 @@
 // Specail case for input length relative labels
 
 use super::*;
-use angora_common::{cond_stmt_base::CondStmtBase, defs};
+use angora_common::{defs};
 use lazy_static::lazy_static;
 use std::sync::Mutex;
 
@@ -49,7 +49,7 @@ pub extern "C" fn __angora_get_len_label(offset: u32, size: u32) -> DfsanLabel {
     };
     get_fat_label(0, len_lb)
 }
-
+/*
 pub fn get_len_cond(cond: &mut CondStmtBase) -> Option<CondStmtBase> {
     let len_lb;
     if is_len_label(cond.lb1) {
@@ -76,7 +76,7 @@ pub fn get_len_cond(cond: &mut CondStmtBase) -> Option<CondStmtBase> {
 
     Some(len_cond)
 }
-
+*/
 #[cfg(test)]
 mod test {
     use super::*;
