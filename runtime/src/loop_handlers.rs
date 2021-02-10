@@ -3,8 +3,7 @@ use angora_common::{tag::*};
 // use itertools::Itertools;
 use lazy_static::lazy_static;
 use crate::{tag_set_wrap};
-use crate::{label_constraints::LabelConstraint};
-use std::{collections::HashMap, fs::File, io::prelude::*, cmp::*, sync::Mutex, time::*};
+use std::{fs::File, io::prelude::*, cmp::*, sync::Mutex, time::*};
 
 const STACK_MAX: usize = 100000;
 
@@ -262,7 +261,7 @@ impl ObjectStack {
         if !loop_handlers::ObjectStack::access_check(lb as u64) {
             return;
         }
-        tag_set_wrap::__angora_tag_set_infer_shape_in_math_op(lb, size);
+        tag_set_wrap::__angora_tag_set_infer_shape_in_math_op(lb, size as u32);
         let mut set_list = tag_set_wrap::tag_set_find(lb as usize);
 
         if set_list.len() > 0 {

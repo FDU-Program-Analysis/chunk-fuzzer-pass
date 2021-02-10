@@ -1,15 +1,15 @@
 use super::*;
-use crate::{loop_handlers::ObjectStack};
-// use angora_common::{config, tag::TagSeg};
+use crate::{loop_handlers::ObjectStack,tag_set_wrap};
+use angora_common::{tag::*, cond_stmt_base::*, defs};
 use lazy_static::lazy_static;
-use std::{slice,sync::Mutex};
-use std::ffi::CStr;
+use std::{slice, sync::Mutex, ffi::CStr};
 use libc::c_char;
 
 // Lazy static doesn't have reference count and won't call drop after the program finish.
 // So, we should call drop manually.. see ***_fini.
 lazy_static! {
     static ref OS: Mutex<Option<ObjectStack>> = Mutex::new(Some(ObjectStack::new()));
+    static ref LC: Mutex<Option<Logger>> = Mutex::new(Some(Logger::new()));
 }
 
 #[no_mangle]
@@ -29,6 +29,15 @@ pub extern "C" fn __dfsw___chunk_get_load_label(
 ) {
     let mut osl = OS.lock().unwrap();
     if let Some(ref mut os) = *osl {
+        let arglen = if size == 0 {
+            unsafe { libc::strlen(addr) as usize }
+        } else {
+            size
+        };
+        let lb = unsafe { dfsan_read_label(addr, arglen) };
+        if lb <= 0 {
+            return;
+        }
         os.get_load_label(addr, size);
     }
 }
@@ -137,7 +146,7 @@ pub extern "C" fn __chunk_trace_cmp_tt(
     _e: u32,
     _f: u8,
     _g: u8,
-    _h: u8
+    _h: u8,
 ) {
     panic!("Forbid calling __chunk_trace_cmp_tt directly");
 }
@@ -148,7 +157,7 @@ pub extern "C" fn __dfsw___chunk_trace_cmp_tt(
     op: u32,
     arg1: u64,
     arg2: u64,
-    condition: u32,
+    _condition: u32,
     is_loop: u8,
     is_cnst1: u8,
     is_cnst2: u8,
@@ -159,21 +168,48 @@ pub extern "C" fn __dfsw___chunk_trace_cmp_tt(
     _l4: DfsanLabel,
     _l5: DfsanLabel,
     _l6: DfsanLabel,
-    _l7: DfsanLabel
+    _l7: DfsanLabel,
 ) {
-    //println!("[CMP] id: {}, ctx: {}", cmpid, get_context());
-    // ret_label: *mut DfsanLabel
-    let lb1 = l4;
-    let lb2 = l5;
+    let lb1 = l2;
+    let lb2 = l3;
     if lb1 == 0 && lb2 == 0 {
+        return;
+    }
+    infer_shape(lb1, size);
+    infer_shape(lb2, size);
+
+    if is_loop == 1 {
+        /*
+        let mut osl = OS.lock().unwrap();
+        if let Some(ref mut os) = *osl {
+            // let lb_payload = os.get_length_payload(op, size, lb1, lb2);
+            // log_length();
+            // lb1和lb2都taint的情况还需要记cond
+        }
+        */
+        println!("Maybe Length");
         return;
     }
 
     let op = infer_eq_sign(op, lb1, lb2);
-    // infer_shape(lb1, size);
-    // infer_shape(lb2, size);
-
-    log_cmp(cmpid, context, condition, op, size, lb1, lb2, arg1, arg2);
+    if op == 32 || op == 33 {
+        if lb1 != 0 && lb2 == 0 && is_cnst2 == 1 {
+            //log enum
+            let vec8 = arg2.to_le_bytes().to_vec();
+            log_enum(size, lb1 as u64, vec8);
+            return;
+        }
+        else if lb1 == 0 && lb2 != 0 && is_cnst1 == 1 {
+            let vec8 = arg1.to_le_bytes().to_vec();
+            log_enum(size, lb2 as u64, vec8);
+            return;
+        }
+        else if lb1 != 0 && lb2 != 0 {
+            //maybe checksum
+            //检查find label的vec长度超过size
+        }
+    }
+    log_cond(op, size, lb1 as u64, lb2 as u64, ChunkField::Constraint);
 }
 
 #[no_mangle]
@@ -191,7 +227,7 @@ pub extern "C" fn __chunk_trace_switch_tt(
 #[no_mangle]
 pub extern "C" fn __dfsw___chunk_trace_switch_tt(
     size: u32,
-    condition: u64,
+    _condition: u64,
     num: u32,
     args: *mut u64,
     is_loop: u8,
@@ -201,46 +237,18 @@ pub extern "C" fn __dfsw___chunk_trace_switch_tt(
     _l3: DfsanLabel,
     _l4: DfsanLabel,
 ) {
-    let lb = l3;
+    let lb = l1;
     if lb == 0 {
         return;
     }
-
     infer_shape(lb, size);
 
-    let mut op = defs::COND_SW_OP;
-    if tag_set_wrap::tag_set_get_sign(lb as usize) {
-        op |= defs::COND_SIGN_MASK;
-    }
+    // let mut op = defs::COND_ICMP_EQ_OP;
+    let sw_args = unsafe { slice::from_raw_parts(args, num as usize) }.to_vec();
 
-    let cond = CondStmtBase {
-        cmpid,
-        context,
-        order: 0,
-        belong: 0,
-        condition: defs::COND_FALSE_ST,
-        level: 0,
-        op,
-        size,
-        lb1: lb,
-        lb2: 0,
-        arg1: condition,
-        arg2: 0,
-    };
-
-    let sw_args = unsafe { slice::from_raw_parts(args, num as usize) };
-
-    let mut lcl = LC.lock().expect("Could not lock LC.");
-    if let Some(ref mut lc) = *lcl {
-        for (i, arg) in sw_args.iter().enumerate() {
-            let mut cond_i = cond.clone();
-            cond_i.order += (i << 16) as u32;
-            cond_i.arg2 = *arg;
-            if *arg == condition {
-                cond_i.condition = defs::COND_DONE_ST;
-            }
-            lc.save(cond_i);
-        }
+    for arg in sw_args {
+        let vec8 = unsafe { slice::from_raw_parts(arg as *const u8, size as usize) }.to_vec();
+        log_enum(size, lb as u64, vec8.clone());
     }
 }
 
@@ -250,48 +258,33 @@ pub extern "C" fn __chunk_trace_cmpfn_tt(
     _a: *mut i8,
     _b: *mut i8,
     _c: u32,
-    _d: u32
+    _d: u8,
+    _e: u8,
 ) {
     panic!("Forbid calling __chunk_trace_cmpfn_tt directly");
 }
 
 #[no_mangle]
 pub extern "C" fn __dfsw___chunk_trace_cmpfn_tt(
-    arg1: *mut i8,
-    arg2: *mut i8,
-    len: u32,
-    is_cnst1: bool,
-    is_cnst2: bool,
+    parg1: *const c_char,
+    parg2: *const c_char,
+    size: u32,
+    _is_cnst1: u8,
+    _is_cnst2: u8,
     _l0: DfsanLabel,
     _l1: DfsanLabel,
     _l2: DfsanLabel,
     _l3: DfsanLabel,
-    _l4: DfsanLabel
+    _l4: DfsanLabel,
 ) {
-    let (arglen1, arglen2) = if len == 0 {
-        unsafe { (libc::strlen(arg1) as usize, libc::strlen(arg2) as usize) }
-    } else {
-        (len as usize, len as usize)
-    };
-
-    println!("{0} {1}", arglen1, arglen2);
-    
-    let lb1 = unsafe { dfsan_read_label(arg1, arglen1) };
-    let lb2 = unsafe { dfsan_read_label(arg2, arglen2) };
-
-    if is_cnst1^is_cnst2 {
-        if is_cnst1 {println!("__chunk_trace_cmpfn_tt : <{0},{1},enum> ", lb2, lb1);}
-        else if is_cnst2 {println!("__chunk_trace_cmpfn_tt : <{0},{1},enum> ", lb1, lb2);}
-    }
-    
     let (arglen1, arglen2) = if size == 0 {
         unsafe { (libc::strlen(parg1) as usize, libc::strlen(parg2) as usize) }
     } else {
         (size as usize, size as usize)
     };
 
-    let lb1 = unsafe { dfsan_read_label(parg1, arglen1) };
-    let lb2 = unsafe { dfsan_read_label(parg2, arglen2) };
+    let lb1 = unsafe { dfsan_read_label(parg1, arglen1) } as u64;
+    let lb2 = unsafe { dfsan_read_label(parg2, arglen2) } as u64;
 
     if lb1 == 0 && lb2 == 0 {
         return;
@@ -300,32 +293,39 @@ pub extern "C" fn __dfsw___chunk_trace_cmpfn_tt(
     let arg1 = unsafe { slice::from_raw_parts(parg1 as *mut u8, arglen1) }.to_vec();
     let arg2 = unsafe { slice::from_raw_parts(parg2 as *mut u8, arglen2) }.to_vec();
 
-    let mut cond = CondStmtBase {
-        cmpid,
-        context,
-        order: 0,
-        belong: 0,
-        condition: defs::COND_FALSE_ST,
-        level: 0,
-        op: defs::COND_FN_OP,
-        size: 0,
-        lb1: 0,
-        lb2: 0,
-        arg1: 0,
-        arg2: 0,
-    };
-
-    if lb1 > 0 {
-        cond.lb1 = lb1;
-        cond.size = arglen2 as u32;
-    } else if lb2 > 0 {
-        cond.lb2 = lb2;
-        cond.size = arglen1 as u32;
+    if lb1 > 0  && lb2 > 0 {
+        log_cond(arglen1 as u32, defs::COND_FN_OP, lb1, lb2, ChunkField::Constraint); // op need check
     }
-    let mut lcl = LC.lock().expect("Could not lock LC.");
-    if let Some(ref mut lc) = *lcl {
-        lc.save(cond);
-        lc.save_magic_bytes((arg1, arg2));
+    else if lb1 > 0 {
+        log_enum(arglen2 as u32, lb1, arg2);
+    }else if lb2 > 0 {
+        log_enum(arglen1 as u32, lb2, arg1);
+    }
+}
+
+
+
+#[no_mangle]
+pub extern "C" fn __chunk_trace_offsfn_tt(
+    _a: u32,
+    _b: u32,
+    _c: u8,
+) {
+    panic!("Forbid calling __chunk_trace_offsfn_tt directly");
+}
+
+#[no_mangle]
+pub extern "C" fn __dfsw___chunk_trace_offsfn_tt(
+    index: i32,
+    op: u32,
+    is_cnst_idx: bool,
+    l0: DfsanLabel,
+    _l1: DfsanLabel,
+    _l2: DfsanLabel,
+) {
+    // op用来指示相对or绝对 0 文件头 1 当前位置 2 文件尾
+    if !is_cnst_idx {
+        println!("__chunk_trace_offsfn_tt : <{0},{1}, offset>", l0, op);
     }
 }
 
@@ -339,25 +339,22 @@ pub extern "C" fn __chunk_trace_lenfn_tt(
     panic!("Forbid calling __chunk_trace_lenfn_tt directly");
 }
 
-pub extern "C" fn __chunk_trace_ofsfn_tt(
-    _a: u32,
-    _b: u32,
-    _c: u32,
-    _d: *mut i8,
-    _e: *mut i8
-) {
-    panic!("Forbid calling __chunk_trace_ofsfn_tt directly");
-}
-
-/*
 #[no_mangle]
-pub extern "C" fn __chunk_trace_offsfn_tt(
-    _a: u32,
-    _b: u32,
-    _c: u8,
-    _d: u8
+pub extern "C" fn __dfsw___chunk_trace_lenfn_tt(
+    dst: *mut i8,
+    len1: u32,
+    len2: u32,
+    is_cnst_dst: bool,
+    is_cnst_len1: bool,
+    is_cnst_len2: bool,
+    _l0: DfsanLabel,
+    l1: DfsanLabel,
+    l2: DfsanLabel,
+    _l3: DfsanLabel,
+    _l4: DfsanLabel,
+    _l5: DfsanLabel
 ) {
-    panic!("Forbid calling __chunk_trace_offsfn_tt directly");
+
 }
 
 #[no_mangle]
@@ -419,8 +416,15 @@ pub extern "C" fn __dfsw___chunk_trace_lenfn_tt(
         println!("__chunk_trace_lenfn_tt : <{0},{1},len>", lb, l2);
     }
     
+fn infer_eq_sign(op: u32, lb1: u32, lb2: u32) -> u32 {
+    if op == defs::COND_ICMP_EQ_OP
+        && ((lb1 > 0 && tag_set_wrap::tag_set_get_sign(lb1 as usize))
+            || (lb2 > 0 && tag_set_wrap::tag_set_get_sign(lb2 as usize)))
+    {
+        return op | defs::COND_SIGN_MASK;
+    }
+    op
 }
-*/
 
 fn infer_shape(lb: u32, size: u32) {
     if lb > 0 {
@@ -429,33 +433,39 @@ fn infer_shape(lb: u32, size: u32) {
 }
 
 #[inline]
-fn log_cmp(
-    cmpid: u32,
-    context: u32,
-    condition: u32,
-    op: u32,
+fn log_cond(
     size: u32,
-    lb1: u32,
-    lb2: u32,
-    arg1: u64,
-    arg2: u64,
+    op: u32,
+    lb1: u64,
+    lb2: u64,
+    field : ChunkField,
 ) {
+    let field = Some(field);
     let cond = CondStmtBase {
-        cmpid,
-        context,
-        order: 0,
-        belong: 0,
-        condition,
-        level: 0,
         op,
         size,
         lb1,
         lb2,
-        arg1,
-        arg2,
+        field,
     };
     let mut lcl = LC.lock().expect("Could not lock LC.");
     if let Some(ref mut lc) = *lcl {
         lc.save(cond);
+    }
+}
+
+fn log_enum(
+    size: u32,
+    lb: u64,
+    enums: Vec<u8>
+) {
+    // 在hashmap里查找lb，把magic_byte插入到candidates里
+    if enums.len() != size as usize{
+        println!("size error");
+        return;
+    }
+    let mut lcl = LC.lock().expect("Could not lock LC.");
+    if let Some(ref mut lc) = *lcl {
+        lc.save_enums(lb, enums);
     }
 }

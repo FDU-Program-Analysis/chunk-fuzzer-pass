@@ -1,7 +1,7 @@
 use bincode::{deserialize_from, serialize_into};
 use std::{collections::HashMap, env, fs, io, path::Path};
 
-use crate::{len_label, tag_set_wrap};
+// use crate::{len_label, tag_set_wrap};
 use angora_common::{cond_stmt_base::CondStmtBase, config, defs, log_data::LogData};
 
 #[derive(Debug)]
@@ -29,7 +29,7 @@ impl Logger {
         }
     }
 
-    fn save_tag(&mut self, lb: u32) -> {
+    pub fn save_tag(&mut self, lb: u64) -> bool {
         if lb > 0 {
             // let tag = tag_set_wrap::tag_set_find(lb as usize);
             if self.data.tags.contains_key(&lb) {
@@ -40,15 +40,27 @@ impl Logger {
                 true
             }
         }
+        else {
+            false
+        }
+
     }
 
-    pub fn save_magic_bytes(&mut self, bytes: (Vec<u8>, Vec<u8>)) {
-        let i = self.data.cond_list.len();
-        if i > 0 {
-            self.data.magic_bytes.insert(i - 1, bytes);
+    pub fn save_enums(&mut self, lb: u64, bytes: Vec<u8>) {
+        if lb > 0 {
+            // let tag = tag_set_wrap::tag_set_find(lb as usize);
+            if self.data.enums.contains_key(&lb) {
+                let v = self.data.enums.get_mut(&lb).unwrap();
+                v.push(bytes);
+            }
+            else {
+                self.data.enums.insert(lb, vec![bytes]);
+            }
+            
         }
     }
 
+    /*
     // like the fn in fparser.rs
     pub fn get_order(&mut self, cond: &mut CondStmtBase) -> u32 {
         let order_key = (cond.cmpid, cond.context);
@@ -61,30 +73,16 @@ impl Logger {
         cond.order += *order;
         *order
     }
+    */
 
-    pub fn save(&mut self, mut cond: CondStmtBase) {
+    pub fn save(&mut self, cond: CondStmtBase) {
         if cond.lb1 == 0 && cond.lb2 == 0 {
             return;
         }
 
-        let mut order = 0;
-
-        // also modify cond to remove len_label information
-        let len_cond = len_label::get_len_cond(&mut cond);
-
-        if cond.op < defs::COND_AFL_OP || cond.op == defs::COND_FN_OP {
-            order = self.get_order(&mut cond);
-        }
-        if order <= config::MAX_COND_ORDER {
-            self.save_tag(cond.lb1);
-            self.save_tag(cond.lb2);
-            self.data.cond_list.push(cond);
-
-            if let Some(mut c) = len_cond {
-                c.order = 0x10000 + order; // avoid the same as cond;
-                self.data.cond_list.push(c);
-            }
-        }
+        self.save_tag(cond.lb1);
+        self.save_tag(cond.lb2);
+        self.data.cond_list.push(cond);
     }
 
     fn fini(&self) {
