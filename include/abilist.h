@@ -30,8 +30,19 @@ public:
   bool isIn(Instruction &Inst, StringRef Category) const {
     if (isa<CallInst>(&Inst)) {
       CallInst *Caller = dyn_cast<CallInst>(&Inst);
-      return SCL_INSECTION(SCL, "angora", "fun",
-                           Caller->getCalledFunction()->getName(), Category);
+
+      if (Function *calledFunction = Caller->getCalledFunction()) {
+        return SCL_INSECTION(SCL, "angora", "fun",
+                           calledFunction->getName(), Category);
+      }
+      //this prints out the void bitcasted functions
+      else if (Function *voidFunc = dyn_cast<Function>(Caller->getCalledValue()->stripPointerCasts())) {
+        // outs() << "Call to => " << voidFunc ->getName().str() << "\n";
+        // outs() << voidFunc->getParent()->getModuleIdentifier() << "\n";
+        return SCL_INSECTION(SCL, "angora", "fun",
+                           voidFunc->getName(), Category);
+      }
+
     }
     return SCL_INSECTION(SCL, "angora", "ins", Inst.getOpcodeName(), Category);
   }
