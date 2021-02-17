@@ -85,7 +85,7 @@ pub extern "C" fn __dfsw___chunk_dump_each_iter(
         return;
     }
     else {
-        println!("[LOG]: Loop iter: {} #[LOG]",loop_cnt);
+        // println!("[LOG]: Loop iter: {} #[LOG]",loop_cnt);
         let mut osl = OS.lock().unwrap();
         if let Some(ref mut os) = *osl {
             os.dump_cur_iter(loop_cnt);
@@ -118,6 +118,8 @@ pub extern "C" fn __dfsw___chunk_pop_obj(
 pub extern "C" fn __chunk_object_stack_fini() {
     let mut osl = OS.lock().unwrap();
     *osl = None;
+    let mut lcl = LC.lock().unwrap();
+    *lcl = None;
 }
 
 #[no_mangle]
@@ -196,11 +198,16 @@ pub extern "C" fn __dfsw___chunk_trace_cmp_tt(
         if lb1 != 0 && lb2 == 0 && is_cnst2 == 1 {
             //log enum
             let vec8 = arg2.to_le_bytes().to_vec();
+            let slice_vec8 = &vec8[..size as usize];
+            let vec8 = slice_vec8.to_vec();
+            
             log_enum(size, lb1 as u64, vec8);
             return;
         }
         else if lb1 == 0 && lb2 != 0 && is_cnst1 == 1 {
             let vec8 = arg1.to_le_bytes().to_vec();
+            let slice_vec8 = &vec8[..size as usize];
+            let vec8 = slice_vec8.to_vec();
             log_enum(size, lb2 as u64, vec8);
             return;
         }
@@ -248,6 +255,9 @@ pub extern "C" fn __dfsw___chunk_trace_switch_tt(
 
     for arg in sw_args {
         let vec8 = unsafe { slice::from_raw_parts(arg as *const u8, size as usize) }.to_vec();
+        let slice_vec8 = &vec8[..size as usize];
+        let vec8 = slice_vec8.to_vec();
+        // println!("sw enum:{:?}", vec8);
         log_enum(size, lb as u64, vec8.clone());
     }
 }
@@ -292,7 +302,6 @@ pub extern "C" fn __dfsw___chunk_trace_cmpfn_tt(
 
     let arg1 = unsafe { slice::from_raw_parts(parg1 as *mut u8, arglen1) }.to_vec();
     let arg2 = unsafe { slice::from_raw_parts(parg2 as *mut u8, arglen2) }.to_vec();
-
     if lb1 > 0  && lb2 > 0 {
         log_cond(arglen1 as u32, defs::COND_FN_OP, lb1, lb2, ChunkField::Constraint); // op need check
     }
@@ -381,7 +390,6 @@ fn log_cond(
     lb2: u64,
     field : ChunkField,
 ) {
-    let field = Some(field);
     let cond = CondStmtBase {
         op,
         size,

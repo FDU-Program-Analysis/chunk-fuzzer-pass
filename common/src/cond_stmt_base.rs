@@ -11,14 +11,14 @@ pub enum ChunkField {
 }
 
 
-#[derive(Debug, Clone, Default, Copy, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
 #[repr(C)] // It should be repr C since we will used it in shared memory
 pub struct CondStmtBase {
     pub op: u32,
     pub size: u32,
     pub lb1: u64,
     pub lb2: u64,
-    pub field: Option<ChunkField>,
+    pub field: ChunkField,
 }
 
 

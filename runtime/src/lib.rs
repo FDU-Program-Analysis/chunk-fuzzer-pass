@@ -9,7 +9,7 @@ pub mod loop_handlers;
 pub mod loop_handlers_wrap;
 
 use crate::logger::Logger;
-pub use crate::{logger::get_log_data, tag_set::TagSet};
+pub use crate::{tag_set::TagSet};
 
 pub type DfsanLabel = u32;
 extern "C" {

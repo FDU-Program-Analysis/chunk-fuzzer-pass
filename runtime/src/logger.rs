@@ -1,33 +1,39 @@
 use bincode::{deserialize_from, serialize_into};
-use std::{collections::HashMap, env, fs, io, path::Path};
+use std::{collections::HashMap, env, fs::File, io::prelude::*, path::Path};
 
 // use crate::{len_label, tag_set_wrap};
-use angora_common::{cond_stmt_base::CondStmtBase, config, defs, log_data::LogData};
+use angora_common::{cond_stmt_base::*, config, defs, log_data::LogData};
 
 #[derive(Debug)]
 pub struct Logger {
     data: LogData,
-    fd: Option<fs::File>,
-    order_map: HashMap<(u32, u32), u32>,
+    // fd: Option<fs::File>,
+    // order_map: HashMap<(u32, u32), u32>,
 }
 
 impl Logger {
     pub fn new() -> Self {
         // export ANGORA_TRACK_OUTPUT=track.log
-        let fd = match env::var(defs::TRACK_OUTPUT_VAR) {
-            Ok(path) => match fs::File::create(&path) {
-                Ok(f) => Some(f),
-                Err(_) => None,
-            },
-            Err(_) => None,
-        };
+        // let fd = match env::var(defs::TRACK_OUTPUT_VAR) {
+        //     Ok(path) => match fs::File::create(&path) {
+        //         Ok(f) => Some(f),
+        //         Err(_) => None,
+        //     },
+        //     Err(_) => None,
+        // };
 
         Self {
             data: LogData::new(),
-            fd,
-            order_map: HashMap::new(),
+            // fd,
+            // order_map: HashMap::new(),
         }
     }
+
+    // pub fn set_file_name(&mut self, json_name: String) {
+    //     let mut log_name = &json_name;
+    //     log_name.replace("json", "log");
+    //     self.file_name = log_name.to_string();
+    // }
 
     pub fn save_tag(&mut self, lb: u64) -> bool {
         if lb > 0 {
@@ -85,11 +91,34 @@ impl Logger {
         self.data.cond_list.push(cond);
     }
 
-    fn fini(&self) {
-        if let Some(fd) = &self.fd {
-            let mut writer = io::BufWriter::new(fd);
-            serialize_into(&mut writer, &self.data).expect("Could not serialize data.");
+    pub fn output_logs(&self, s: &mut String) {
+        // output：(lb1，lb2, field, remarks)
+        // remarks: Enum's candidate; Constraints's op; offset's absolute/relatively
+        for (key,value) in &self.data.enums {
+            s.push_str(&format!("({:016X}, {:016X}, Enum, {{",key,0));
+            for vi in value {
+                // let enumi = match String::from_utf8(vi.to_vec()) {
+                //     Ok(v) => v,
+                //     Err(e) => panic!("invalid utf-8 sequence: {}",e),
+                // };
+                s.push_str(&format!("{:02X?}, ",vi));
+            }
+            s.push_str(&format!("}})\n"));
         }
+        for i in &self.data.cond_list {
+            s.push_str(&format!("({:016X}, {:016X}, {:?}, {})\n", i.lb1, i.lb2, i.field, i.op));
+        }
+    }
+
+    fn fini(&self) {
+        // if let Some(fd) = &self.fd {
+        let mut fd = File::create("track.log").expect("Unable to create log file");
+        let mut s = String::new();
+        self.output_logs(&mut s); 
+        fd.write_all(s.as_bytes()).expect("Unable to write file");
+            // let mut writer = io::BufWriter::new(fd);
+            // serialize_into(&mut writer, &self.data).expect("Could not serialize data.");
+        // }
     }
 }
 
@@ -98,7 +127,7 @@ impl Drop for Logger {
         self.fini();
     }
 }
-
+/*
 pub fn get_log_data(path: &Path) -> io::Result<LogData> {
     let f = fs::File::open(path)?;
     if f.metadata().unwrap().len() == 0 {
@@ -116,3 +145,4 @@ mod tests {
     #[test]
     fn it_works() {}
 }
+*/
