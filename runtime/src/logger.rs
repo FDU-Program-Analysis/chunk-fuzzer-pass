@@ -1,48 +1,72 @@
 use bincode::{deserialize_from, serialize_into};
-use std::{collections::HashMap, env, fs, io, path::Path};
+use std::{collections::HashMap, env, fs::File, io::prelude::*, path::Path};
 
-use crate::{len_label, tag_set_wrap};
-use angora_common::{cond_stmt_base::CondStmtBase, config, defs, log_data::LogData};
+// use crate::{len_label, tag_set_wrap};
+use angora_common::{cond_stmt_base::*, config, defs, log_data::LogData};
 
 #[derive(Debug)]
 pub struct Logger {
     data: LogData,
-    fd: Option<fs::File>,
-    order_map: HashMap<(u32, u32), u32>,
+    // fd: Option<fs::File>,
+    // order_map: HashMap<(u32, u32), u32>,
 }
 
 impl Logger {
     pub fn new() -> Self {
         // export ANGORA_TRACK_OUTPUT=track.log
-        let fd = match env::var(defs::TRACK_OUTPUT_VAR) {
-            Ok(path) => match fs::File::create(&path) {
-                Ok(f) => Some(f),
-                Err(_) => None,
-            },
-            Err(_) => None,
-        };
+        // let fd = match env::var(defs::TRACK_OUTPUT_VAR) {
+        //     Ok(path) => match fs::File::create(&path) {
+        //         Ok(f) => Some(f),
+        //         Err(_) => None,
+        //     },
+        //     Err(_) => None,
+        // };
 
         Self {
             data: LogData::new(),
-            fd,
-            order_map: HashMap::new(),
+            // fd,
+            // order_map: HashMap::new(),
         }
     }
 
-    fn save_tag(&mut self, lb: u32) {
+    // pub fn set_file_name(&mut self, json_name: String) {
+    //     let mut log_name = &json_name;
+    //     log_name.replace("json", "log");
+    //     self.file_name = log_name.to_string();
+    // }
+
+    pub fn save_tag(&mut self, lb: u64) -> bool {
         if lb > 0 {
-            let tag = tag_set_wrap::tag_set_find(lb as usize);
-            self.data.tags.entry(lb).or_insert(tag);
+            // let tag = tag_set_wrap::tag_set_find(lb as usize);
+            if self.data.tags.contains_key(&lb) {
+                false
+            }
+            else {
+                self.data.tags.entry(lb).or_insert(true);
+                true
+            }
+        }
+        else {
+            false
+        }
+
+    }
+
+    pub fn save_enums(&mut self, lb: u64, bytes: Vec<u8>) {
+        if lb > 0 {
+            // let tag = tag_set_wrap::tag_set_find(lb as usize);
+            if self.data.enums.contains_key(&lb) {
+                let v = self.data.enums.get_mut(&lb).unwrap();
+                v.push(bytes);
+            }
+            else {
+                self.data.enums.insert(lb, vec![bytes]);
+            }
+            
         }
     }
 
-    pub fn save_magic_bytes(&mut self, bytes: (Vec<u8>, Vec<u8>)) {
-        let i = self.data.cond_list.len();
-        if i > 0 {
-            self.data.magic_bytes.insert(i - 1, bytes);
-        }
-    }
-
+    /*
     // like the fn in fparser.rs
     pub fn get_order(&mut self, cond: &mut CondStmtBase) -> u32 {
         let order_key = (cond.cmpid, cond.context);
@@ -55,37 +79,46 @@ impl Logger {
         cond.order += *order;
         *order
     }
+    */
 
-    pub fn save(&mut self, mut cond: CondStmtBase) {
+    pub fn save(&mut self, cond: CondStmtBase) {
         if cond.lb1 == 0 && cond.lb2 == 0 {
             return;
         }
 
-        let mut order = 0;
+        self.save_tag(cond.lb1);
+        self.save_tag(cond.lb2);
+        self.data.cond_list.push(cond);
+    }
 
-        // also modify cond to remove len_label information
-        let len_cond = len_label::get_len_cond(&mut cond);
-
-        if cond.op < defs::COND_AFL_OP || cond.op == defs::COND_FN_OP {
-            order = self.get_order(&mut cond);
-        }
-        if order <= config::MAX_COND_ORDER {
-            self.save_tag(cond.lb1);
-            self.save_tag(cond.lb2);
-            self.data.cond_list.push(cond);
-
-            if let Some(mut c) = len_cond {
-                c.order = 0x10000 + order; // avoid the same as cond;
-                self.data.cond_list.push(c);
+    pub fn output_logs(&self, s: &mut String) {
+        // output：(lb1，lb2, field, remarks)
+        // remarks: Enum's candidate; Constraints's op; offset's absolute/relatively
+        for (key,value) in &self.data.enums {
+            s.push_str(&format!("({:016X}, {:016X}, Enum, {{",key,0));
+            for vi in value {
+                // let enumi = match String::from_utf8(vi.to_vec()) {
+                //     Ok(v) => v,
+                //     Err(e) => panic!("invalid utf-8 sequence: {}",e),
+                // };
+                s.push_str(&format!("{:02X?}, ",vi));
             }
+            s.push_str(&format!("}})\n"));
+        }
+        for i in &self.data.cond_list {
+            s.push_str(&format!("({:016X}, {:016X}, {:?}, {})\n", i.lb1, i.lb2, i.field, i.op));
         }
     }
 
     fn fini(&self) {
-        if let Some(fd) = &self.fd {
-            let mut writer = io::BufWriter::new(fd);
-            serialize_into(&mut writer, &self.data).expect("Could not serialize data.");
-        }
+        // if let Some(fd) = &self.fd {
+        let mut fd = File::create("track.log").expect("Unable to create log file");
+        let mut s = String::new();
+        self.output_logs(&mut s); 
+        fd.write_all(s.as_bytes()).expect("Unable to write file");
+            // let mut writer = io::BufWriter::new(fd);
+            // serialize_into(&mut writer, &self.data).expect("Could not serialize data.");
+        // }
     }
 }
 
@@ -94,7 +127,7 @@ impl Drop for Logger {
         self.fini();
     }
 }
-
+/*
 pub fn get_log_data(path: &Path) -> io::Result<LogData> {
     let f = fs::File::open(path)?;
     if f.metadata().unwrap().len() == 0 {
@@ -112,3 +145,4 @@ mod tests {
     #[test]
     fn it_works() {}
 }
+*/

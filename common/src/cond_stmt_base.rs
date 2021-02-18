@@ -1,42 +1,36 @@
-use crate::defs::*;
+// use crate::defs::*;
 use serde_derive::{Deserialize, Serialize};
 
-#[derive(Debug, Clone, Default, Copy, Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, PartialEq, Eq, Ord, PartialOrd, Debug, Clone, Copy, Hash)]
+pub enum ChunkField {
+    Enum,
+    Length,
+    Checksum,
+    Offset,
+    Constraint,
+}
+
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
 #[repr(C)] // It should be repr C since we will used it in shared memory
 pub struct CondStmtBase {
-    pub cmpid: u32,
-    pub context: u32,
-    pub order: u32,
-    pub belong: u32,
-
-    pub condition: u32,
-    pub level: u32,
     pub op: u32,
     pub size: u32,
-
-    pub lb1: u32,
-    pub lb2: u32,
-
-    pub arg1: u64,
-    pub arg2: u64,
+    pub lb1: u64,
+    pub lb2: u64,
+    pub field: ChunkField,
 }
 
-/*
-#[derive(Serialize, Deserialize, PartialEq, Debug, Clone)]
-pub struct CondStmtMb {
-    pub base: CondStmtBase,
-    pub magic_bytes: Option<(Vec<u8>, Vec<u8>)>,
-}
-*/
 
 impl PartialEq for CondStmtBase {
     fn eq(&self, other: &CondStmtBase) -> bool {
-        self.cmpid == other.cmpid && self.context == other.context && self.order == other.order
+        self.lb1 == other.lb1 && self.lb2 == other.lb2 && self.op == other.op
     }
 }
 
 impl Eq for CondStmtBase {}
 
+/*
 impl CondStmtBase {
     pub fn flip_condition(&mut self) {
         if self.condition == COND_FALSE_ST {
@@ -80,3 +74,5 @@ impl CondStmtBase {
         self.condition == COND_DONE_ST
     }
 }
+
+*/

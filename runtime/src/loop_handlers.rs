@@ -3,13 +3,12 @@ use angora_common::{tag::*};
 // use itertools::Itertools;
 use lazy_static::lazy_static;
 use crate::{tag_set_wrap};
-use crate::{label_constraints::LabelConstraint};
-use std::{collections::HashMap, fs::File, io::prelude::*, cmp::*, sync::Mutex, time::*};
+use std::{fs::File, io::prelude::*, cmp::*, sync::Mutex, time::*};
 
 const STACK_MAX: usize = 100000;
 
 lazy_static! {
-    static ref LBCN: Mutex<Option<LabelConstraint>> = Mutex::new(Some(LabelConstraint::new()));
+    static ref LC: Mutex<Option<Logger>> = Mutex::new(Some(Logger::new()));
 }
 
 // Loop & Function labels. 
@@ -88,7 +87,7 @@ impl ObjectStack {
 
     // SegTag-> TaintTag ,minimize
     pub fn seg_tag_2_taint_tag(
-        lb: u32,
+        lb: u64,
         list : &mut Vec<TagSeg>, 
     )-> Vec<TaintSeg> {
         list.sort_by(|a, b| {
@@ -144,13 +143,13 @@ impl ObjectStack {
                 other => other,
             }
         });
-        let mut cur_lb = 0;
+        let mut cur_lb = 0u64;
         let mut cur_begin = 0;
         let mut cur_end = 0;
         let mut cur_son = vec![];
         let mut new_list = vec![];
         for i in list.clone() {
-            // first TaintSeg
+            // first TS
             if cur_begin == cur_end {
                 cur_lb = i.lb;
                 cur_begin = i.begin;
@@ -160,6 +159,9 @@ impl ObjectStack {
             else {
                 // 断开了
                 if i.begin > cur_end {
+                    if cur_lb == 0 {
+                        cur_lb = hash_combine(&cur_son);
+                    }
                     new_list.push(TaintSeg{
                         lb: cur_lb,
                         begin: cur_begin,
@@ -192,6 +194,9 @@ impl ObjectStack {
             }
         }
         if cur_begin != cur_end {
+            if cur_lb == 0 {
+                cur_lb = hash_combine(&cur_son);
+            }
             new_list.push(TaintSeg{
                 lb: cur_lb,
                 begin: cur_begin, 
@@ -215,11 +220,11 @@ impl ObjectStack {
 
 
     pub fn access_check(
-        lb: u32,
+        lb: u64,
     ) -> bool {
-        let mut lbcnl = LBCN.lock().unwrap();
-        if let Some(ref mut lbcn) = *lbcnl {
-            lbcn.insert_lb(lb)
+        let mut lcl = LC.lock().unwrap();
+        if let Some(ref mut lc) = *lcl {
+            lc.save_tag(lb)
         }
         else {
             false
@@ -250,19 +255,20 @@ impl ObjectStack {
             size
         };
         let lb = unsafe { dfsan_read_label(addr, arglen) };
-        if lb == 0 {
+        if lb <= 0 {
             return;
         }
-        if !loop_handlers::ObjectStack::access_check(lb) {
+        if !loop_handlers::ObjectStack::access_check(lb as u64) {
             return;
         }
+        tag_set_wrap::__angora_tag_set_infer_shape_in_math_op(lb, size as u32);
         let mut set_list = tag_set_wrap::tag_set_find(lb as usize);
 
         if set_list.len() > 0 {
             println!("prelist: {:?}", set_list);
         }
         
-        let mut list = loop_handlers::ObjectStack::seg_tag_2_taint_tag(lb, &mut set_list);
+        let mut list = loop_handlers::ObjectStack::seg_tag_2_taint_tag(lb as u64, &mut set_list);
 
         if list.len() > 0 {
             println!("afterlist:{:?}", list);
@@ -392,7 +398,6 @@ impl ObjectStack {
         s: &mut String,
         ttsg: &TaintSeg,
         depth: usize,
-        prefix: String,
     ){
         let blank = "  ".repeat(depth);
         let blank2 = "  ".repeat(depth+1);
@@ -401,7 +406,8 @@ impl ObjectStack {
         // let field = "type";
         let str_son = "son";
         let mut son_flag = false;
-        s.push_str(&format!("{}\"{}\":{{\n", blank, prefix));
+        s.push_str(&format!("{}\"{:016X}\":\n", blank, ttsg.lb));
+        s.push_str(&format!("{}{{\n",blank));
         //need check lb
         s.push_str(&format!("{}\"{}\": {},\n",blank2, start, ttsg.begin)); //    "start": 0,
         s.push_str(&format!("{}\"{}\": {},\n",blank2, end, ttsg.end));     //    "end": 8,
@@ -414,17 +420,15 @@ impl ObjectStack {
             son_flag = true;
         }
         if son_flag {
-            s.push_str(&format!("{}\"{}\": {{\n",blank, str_son)); 
+            s.push_str(&format!("{}\"{}\": {{\n",blank2, str_son)); 
         }
         for i in 0 .. ttsg_sons.len() {
         // for (&i_sum, &i_son) in &label.sum.iter().zip(&label.son.iter()) {
-            let prefix_i = prefix.clone() + &format!("{:02X}", i);
-            // s.push_str(&format!("{}\"{}\": {{\n",blank, &prefix_i));
-            loop_handlers::ObjectStack::output_format(s, &ttsg_sons[i], depth+1, prefix_i.clone());
+            loop_handlers::ObjectStack::output_format(s, &ttsg_sons[i], depth+1);
             // s.push_str(&format!("{}}},\n",blank));
         }
         if son_flag {
-            s.push_str(&format!("{}}}\n",blank)); 
+            s.push_str(&format!("{}}}\n",blank2)); 
         }
         s.push_str(&format!("{}}},\n",blank));
     }
@@ -445,7 +449,7 @@ impl ObjectStack {
         let mut s = String::new();
         loop_handlers::ObjectStack::minimize_list(&mut self.objs[self.cur_id].sum);
         for i in &self.objs[self.cur_id].sum {
-            loop_handlers::ObjectStack::output_format(&mut s, &i, 0, String::new());
+            loop_handlers::ObjectStack::output_format(&mut s, &i, 0);
         }
         if self.file_name.len() == 0 {
             let timestamp = {
@@ -474,4 +478,21 @@ impl Drop for ObjectStack {
 // print_type_of(&xxx);
 fn print_type_of<T>(_: &T) {
     println!("{}", std::any::type_name::<T>())
+}
+
+
+pub fn hash_combine(
+    ts: &Vec<TaintSeg>
+) -> u64 {
+    let mut seed = 0;
+    if ts.len() == 1 {
+        seed = ts[0].lb
+    }
+    else {
+        for b in  ts {
+            seed ^=
+                b.lb ^ 0x9E3779B97F4A7C15u64 ^ (seed << 6) ^ (seed >> 2);
+        }
+    }
+    seed
 }

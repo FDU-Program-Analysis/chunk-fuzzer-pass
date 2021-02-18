@@ -8,19 +8,10 @@ pub struct TagSeg {
     pub end: u32,
 }
 
-#[derive(Serialize, Deserialize, PartialEq, Eq, Ord, PartialOrd, Debug, Clone, Copy, Hash)]
-pub enum ChunkField {
-    Id,
-    Length,
-    Checksum,
-    Index,
-    Other,
-}
-
 #[derive(Serialize, Deserialize, PartialEq, Eq, Ord, PartialOrd, Debug, Clone, Hash)]
 #[repr(C)] 
 pub struct TaintSeg {
-    pub lb: u32,
+    pub lb: u64,
     pub begin: u32,
     pub end: u32,
     pub son: Option<Vec<TaintSeg>>,
