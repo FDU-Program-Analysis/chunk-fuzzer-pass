@@ -57,7 +57,9 @@ impl Logger {
             // let tag = tag_set_wrap::tag_set_find(lb as usize);
             if self.data.enums.contains_key(&lb) {
                 let v = self.data.enums.get_mut(&lb).unwrap();
-                v.push(bytes);
+                if !v.contains(&bytes) {
+                    v.push(bytes);
+                }
             }
             else {
                 self.data.enums.insert(lb, vec![bytes]);

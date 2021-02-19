@@ -246,38 +246,28 @@ impl ObjectStack {
     // 单次load不判断连续和互斥，只在pop和迭代的时候判断
     pub fn get_load_label(
         &mut self,
-        addr: *const i8, 
-        size: usize,
+        lb: u32,
     ) {
-        let arglen = if size == 0 {
-            unsafe { libc::strlen(addr) as usize }
-        } else {
-            size
-        };
-        let lb = unsafe { dfsan_read_label(addr, arglen) };
-        if lb <= 0 {
-            return;
-        }
+        
         if !loop_handlers::ObjectStack::access_check(lb as u64) {
             return;
         }
-        tag_set_wrap::__angora_tag_set_infer_shape_in_math_op(lb, size as u32);
         let mut set_list = tag_set_wrap::tag_set_find(lb as usize);
 
-        if set_list.len() > 0 {
-            println!("prelist: {:?}", set_list);
-        }
+        // if set_list.len() > 0 {
+        //     println!("prelist: {:?}", set_list);
+        // }
         
         let mut list = loop_handlers::ObjectStack::seg_tag_2_taint_tag(lb as u64, &mut set_list);
 
-        if list.len() > 0 {
-            println!("afterlist:{:?}", list);
-        }
+        // if list.len() > 0 {
+        //     println!("afterlist:{:?}", list);
+        // }
 
         loop_handlers::ObjectStack::minimize_list(&mut list);
-        if list.len() > 0 {
-            println!("load: {:?}", list);
-        }
+        // if list.len() > 0 {
+        //     println!("load: {:?}", list);
+        // }
         self.insert_labels(&mut list);
         return;
     }
@@ -348,9 +338,9 @@ impl ObjectStack {
                 self.insert_iter_into_sum();
                 self.objs[self.cur_id].cur_iter.as_mut().unwrap().clear();
 
-                if self.objs[self.cur_id].sum.len() > 0{
-                    println!("dump_cur_iter: {:?}",self.objs[self.cur_id].sum);
-                }
+                // if self.objs[self.cur_id].sum.len() > 0{
+                //     println!("dump_cur_iter: {:?}",self.objs[self.cur_id].sum);
+                // }
 
             }
             else {
@@ -373,9 +363,9 @@ impl ObjectStack {
         if top.is_some() {
             let top_obj = top.unwrap();
 
-            if top_obj.sum.len() > 0 {
-                println!("pop obj: {:?}", top_obj.sum);
-            }
+            // if top_obj.sum.len() > 0 {
+            //     println!("pop obj: {:?}", top_obj.sum);
+            // }
             
             if top_obj.hash != hash {
                 panic!("[ERR] :pop error! incorrect Hash {} #[ERR]", top_obj.hash);

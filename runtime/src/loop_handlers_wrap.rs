@@ -24,8 +24,8 @@ pub extern "C" fn __chunk_get_load_label(
 pub extern "C" fn __dfsw___chunk_get_load_label(
     addr: *const i8, 
     size: usize,
-    _l0: DfsanLabel,
-    _l1: DfsanLabel,
+    l0: DfsanLabel,
+    l1: DfsanLabel,
 ) {
     let mut osl = OS.lock().unwrap();
     if let Some(ref mut os) = *osl {
@@ -38,7 +38,8 @@ pub extern "C" fn __dfsw___chunk_get_load_label(
         if lb <= 0 {
             return;
         }
-        os.get_load_label(addr, size);
+        infer_shape(lb, arglen as u32);
+        os.get_load_label(lb);
     }
 }
 
@@ -189,7 +190,7 @@ pub extern "C" fn __dfsw___chunk_trace_cmp_tt(
             // lb1和lb2都taint的情况还需要记cond
         }
         */
-        println!("Maybe Length");
+        // println!("Maybe Length");
         return;
     }
 
@@ -197,6 +198,9 @@ pub extern "C" fn __dfsw___chunk_trace_cmp_tt(
     if op == 32 || op == 33 {
         if lb1 != 0 && lb2 == 0 && is_cnst2 == 1 {
             //log enum
+            if arg2 == 0 {
+                return;
+            }
             let vec8 = arg2.to_le_bytes().to_vec();
             let slice_vec8 = &vec8[..size as usize];
             let vec8 = slice_vec8.to_vec();
@@ -205,6 +209,9 @@ pub extern "C" fn __dfsw___chunk_trace_cmp_tt(
             return;
         }
         else if lb1 == 0 && lb2 != 0 && is_cnst1 == 1 {
+            if arg1 == 0 {
+                return;
+            }
             let vec8 = arg1.to_le_bytes().to_vec();
             let slice_vec8 = &vec8[..size as usize];
             let vec8 = slice_vec8.to_vec();
@@ -238,13 +245,13 @@ pub extern "C" fn __dfsw___chunk_trace_switch_tt(
     num: u32,
     args: *mut u64,
     is_loop: u8,
-    _l0: DfsanLabel,
-    l1: DfsanLabel,
+    l0: DfsanLabel,
+    _l1: DfsanLabel,
     _l2: DfsanLabel,
     _l3: DfsanLabel,
     _l4: DfsanLabel,
 ) {
-    let lb = l1;
+    let lb = l0;
     if lb == 0 {
         return;
     }
@@ -254,10 +261,9 @@ pub extern "C" fn __dfsw___chunk_trace_switch_tt(
     let sw_args = unsafe { slice::from_raw_parts(args, num as usize) }.to_vec();
 
     for arg in sw_args {
-        let vec8 = unsafe { slice::from_raw_parts(arg as *const u8, size as usize) }.to_vec();
+        let vec8 = arg.to_le_bytes().to_vec();
         let slice_vec8 = &vec8[..size as usize];
         let vec8 = slice_vec8.to_vec();
-        // println!("sw enum:{:?}", vec8);
         log_enum(size, lb as u64, vec8.clone());
     }
 }
@@ -303,7 +309,7 @@ pub extern "C" fn __dfsw___chunk_trace_cmpfn_tt(
     let arg1 = unsafe { slice::from_raw_parts(parg1 as *mut u8, arglen1) }.to_vec();
     let arg2 = unsafe { slice::from_raw_parts(parg2 as *mut u8, arglen2) }.to_vec();
     if lb1 > 0  && lb2 > 0 {
-        log_cond(arglen1 as u32, defs::COND_FN_OP, lb1, lb2, ChunkField::Constraint); // op need check
+        log_cond(defs::COND_FN_OP, arglen1 as u32, lb1, lb2, ChunkField::Constraint); // op need check
     }
     else if lb1 > 0 {
         log_enum(arglen2 as u32, lb1, arg2);
@@ -384,8 +390,8 @@ fn infer_shape(lb: u32, size: u32) {
 
 #[inline]
 fn log_cond(
-    size: u32,
     op: u32,
+    size: u32,
     lb1: u64,
     lb2: u64,
     field : ChunkField,
@@ -417,4 +423,5 @@ fn log_enum(
     if let Some(ref mut lc) = *lcl {
         lc.save_enums(lb, enums);
     }
+    // log_cond(hash, size, lb, 0, ChunkField::Enum);
 }
