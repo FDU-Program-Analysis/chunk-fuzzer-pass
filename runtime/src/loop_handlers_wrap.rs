@@ -1,15 +1,17 @@
 use super::*;
-use crate::{loop_handlers::ObjectStack,tag_set_wrap};
+use crate::{loop_handlers::ObjectStack, tag_set_wrap::*};
 use angora_common::{tag::*, cond_stmt_base::*, defs};
 use lazy_static::lazy_static;
 use std::{slice, sync::Mutex, ffi::CStr};
 use libc::c_char;
+use std::convert::TryInto;
 
 // Lazy static doesn't have reference count and won't call drop after the program finish.
 // So, we should call drop manually.. see ***_fini.
 lazy_static! {
     static ref OS: Mutex<Option<ObjectStack>> = Mutex::new(Some(ObjectStack::new()));
     static ref LC: Mutex<Option<Logger>> = Mutex::new(Some(Logger::new()));
+    static ref TS: Mutex<Option<TagSet>> = Mutex::new(Some(TagSet::new()));
 }
 
 #[no_mangle]
@@ -221,6 +223,26 @@ pub extern "C" fn __dfsw___chunk_trace_cmp_tt(
         else if lb1 != 0 && lb2 != 0 {
             //maybe checksum
             //检查find label的vec长度超过size
+            
+            //可能要遍历所有的taintseg去找对应的begin end 在loop handler里面补充一个新的函数
+            let list1 = tag_set_find(lb1.try_into().unwrap());
+            let list2 = tag_set_find(lb2.try_into().unwrap());
+            let size1 = if list1.len()>0 { list1[list1.len()-1].end-list1[0].begin} else {0};
+            let size2 = if list2.len()>0 { list2[list2.len()-1].end-list2[0].begin} else {0};
+
+            __angora_tag_set_show(lb1.try_into().unwrap();
+            __angora_tag_set_show(lb2.try_into().unwrap());
+            println!("size {0},arg1 {1},arg2 {2}", size, size1, size2);
+            )
+            // op为0 size用payload长度 lb1是metadata lb2是payload
+            if size2 > 3*size1 {
+                log_cond(0, size2, lb1 as u64, lb2 as u64, ChunkField::Checksum);
+                println!("__chunk_trace_cmp_tt : <{0}, {1}, checksum>", lb1, lb2);
+            } else if size1 > 3*size2 {
+                log_cond(0, size1, lb2 as u64, lb1 as u64, ChunkField::Checksum);
+                println!("__chunk_trace_cmp_tt : <{1}, {0}, checksum>", lb1, lb2);
+            }
+            return;
         }
     }
     log_cond(op, size, lb1 as u64, lb2 as u64, ChunkField::Constraint);
@@ -338,8 +360,10 @@ pub extern "C" fn __dfsw___chunk_trace_offsfn_tt(
     _l1: DfsanLabel,
     _l2: DfsanLabel,
 ) {
+    // size暂时用index填充
     // op用来指示相对or绝对 0 文件头 1 当前位置 2 文件尾
-    if !is_cnst_idx {
+    if !is_cnst_idx && l0 !=0 {
+        log_cond(op, index as u32, l0 as u64, 0, ChunkField::Offset);
         println!("__chunk_trace_offsfn_tt : <{0},{1}, offset>", l0, op);
     }
 }
@@ -369,6 +393,26 @@ pub extern "C" fn __dfsw___chunk_trace_lenfn_tt(
     _l4: DfsanLabel,
     _l5: DfsanLabel
 ) {
+    let len = if len2 == 0 {
+        len1 as usize
+    } else {
+        (len1*len2) as usize
+    };
+
+    let lb = unsafe { dfsan_read_label(dst,len) };
+    // println!("lenfn_tt : {0},{1},{2},{3}", lb, len1, len2, len);
+    // println!("cons: {0} {1} {2}", is_cnst_dst,is_cnst_len1,is_cnst_len2);
+
+    // lb先dst后len
+    if (!is_cnst_dst) && (!is_cnst_len1){
+        log_cond(0, len as u32, lb as u64, l1 as u64, ChunkField::Length);
+        println!("__chunk_trace_lenfn_tt : <{0},{1},len>", lb, l1);
+    }
+
+    if len2!=0 && (!is_cnst_dst) && (!is_cnst_len2) {
+        log_cond(0, len as u32, lb as u64, l2 as u64, ChunkField::Length);
+        println!("__chunk_trace_lenfn_tt : <{0},{1},len>", lb, l2);
+    }
 
 }
 
@@ -425,3 +469,4 @@ fn log_enum(
     }
     // log_cond(hash, size, lb, 0, ChunkField::Enum);
 }
+

@@ -17,17 +17,20 @@ void offset_test(){
 }
 
 void cmp_test(){
+    char buf1[10];
+    fread(buf1, sizeof(char),5,fp);
     for(int i=0;i<5;i++){
-        for(int j=0;j<5;j++) printf("%d\n",i+j);
-        if(i>3) i+=1;
+        if((buf1[i]-'0')>1) i+=1;
     }
 }
 
 void switch_test(){
+    char buf1[10];
+    fread(buf1, sizeof(char),5,fp);
     for(int i=0;i<5;i++){
-        switch(i){
-            case 0 : printf("case0\n");break;
-            case 1 : printf("first\n");break;
+        switch(buf1[i]){
+            case '0' : printf("case0\n");break;
+            case '1' : printf("first\n");break;
             default: printf("else\n");break;
         }
     }
@@ -111,7 +114,7 @@ int main()
 {
  	fp = fopen("file", "rb");
     
-    switch_test();
+    cmp_test();
 
     fclose(fp);
 	return 0;
