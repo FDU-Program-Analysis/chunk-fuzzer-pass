@@ -16,6 +16,18 @@ void offset_test(){
     }
 }
 
+void checksum_test(){
+    char buffer[10];
+    fread(buffer,sizeof(char),10,fp);
+
+    int loop = 1;
+    while(loop){
+        char c = buffer[0] + buffer[1]-'0' + buffer[2]-'0' + buffer[3]-'0';
+        printf("%c %c\n", c, buffer[8]);
+        if(c!=buffer[8]) loop=0;
+    }
+}
+
 void cmp_test(){
     char buf1[10];
     fread(buf1, sizeof(char),5,fp);
@@ -66,10 +78,10 @@ void len0_test(){
 
     char buf1[10];
     for(int i=0;i<3;i++){
-        fread(buf1, sizeof(char),len[i],fp);
-        // dfsan_label buffer1 = dfsan_read_label(buf1,sizeof(buf1));
-        // dfsan_label len_lb = dfsan_read_label(len+i,sizeof(len[i]));
-        // printf("%s %d %d\n",buf1,buffer1,len_lb);
+        fread(buf1, len[i],len[0],fp);
+        dfsan_label buffer1 = dfsan_read_label(buf1,sizeof(buf1));
+        dfsan_label len_lb = dfsan_read_label(len+i,sizeof(len[i]));
+        printf("%s %d %d\n",buf1,buffer1,len_lb);
     }
 }
 
@@ -79,6 +91,7 @@ void len1_test(){
     fseek(fp,0,SEEK_SET);
 
     char target[10];
+    for(int i=0;i<10;i++) target[i]='\0';
     char lenbuf[10];
     int len;
     for(int i=0;i<3;i++){
@@ -86,8 +99,8 @@ void len1_test(){
         len=lenbuf[0]-'0';
         // memcpy(target,buffer,len);
         strncpy(target,buffer,len);
-        // dfsan_label buffer1 = dfsan_read_label(target,sizeof(target));
-        // printf("%s %d\n",target,buffer1);
+        dfsan_label bufferlb = dfsan_read_label(target,sizeof(target));
+        printf("%s %d\n",target,bufferlb);
     }
 }
 
@@ -102,11 +115,12 @@ void len2_test(){
     len[2]=lenbuf[2]-'0';
 
     char buf1[10];
+    for(int i=0;i<10;i++) buf1[i]='\0';
     for(int i=0;i<3;i++){
         read(fd,buf1,len[i]);
-        // dfsan_label buffer1 = dfsan_read_label(buf1,sizeof(buf1));
-        // dfsan_label len_lb = dfsan_read_label(len+i,sizeof(len[i]));
-        // printf("%s %d %d\n",buf1,buffer1,len_lb);
+        dfsan_label buffer1 = dfsan_read_label(buf1,sizeof(buf1));
+        dfsan_label len_lb = dfsan_read_label(len+i,sizeof(len[i]));
+        printf("%s %d %d\n",buf1,buffer1,len_lb);
     }
 }
 
@@ -114,7 +128,7 @@ int main()
 {
  	fp = fopen("file", "rb");
     
-    cmp_test();
+    checksum_test();
 
     fclose(fp);
 	return 0;

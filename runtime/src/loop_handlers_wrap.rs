@@ -192,7 +192,8 @@ pub extern "C" fn __dfsw___chunk_trace_cmp_tt(
             // lb1和lb2都taint的情况还需要记cond
         }
         */
-        // println!("Maybe Length");
+        println!("Loop Length <{0} {1}>", lb1, lb2);
+        log_cond(0, size, lb1 as u64, lb2 as u64, ChunkField::Length);
         return;
     }
 
@@ -224,16 +225,15 @@ pub extern "C" fn __dfsw___chunk_trace_cmp_tt(
             //maybe checksum
             //检查find label的vec长度超过size
             
-            //可能要遍历所有的taintseg去找对应的begin end 在loop handler里面补充一个新的函数
             let list1 = tag_set_find(lb1.try_into().unwrap());
             let list2 = tag_set_find(lb2.try_into().unwrap());
             let size1 = if list1.len()>0 { list1[list1.len()-1].end-list1[0].begin} else {0};
             let size2 = if list2.len()>0 { list2[list2.len()-1].end-list2[0].begin} else {0};
 
-            __angora_tag_set_show(lb1.try_into().unwrap();
+            __angora_tag_set_show(lb1.try_into().unwrap());
             __angora_tag_set_show(lb2.try_into().unwrap());
             println!("size {0},arg1 {1},arg2 {2}", size, size1, size2);
-            )
+            
             // op为0 size用payload长度 lb1是metadata lb2是payload
             if size2 > 3*size1 {
                 log_cond(0, size2, lb1 as u64, lb2 as u64, ChunkField::Checksum);
@@ -245,7 +245,9 @@ pub extern "C" fn __dfsw___chunk_trace_cmp_tt(
             return;
         }
     }
-    log_cond(op, size, lb1 as u64, lb2 as u64, ChunkField::Constraint);
+    if lb1 != 0 && lb2 != 0 {
+        log_cond(op, size, lb1 as u64, lb2 as u64, ChunkField::Constraint);
+    }
 }
 
 #[no_mangle]
@@ -400,8 +402,8 @@ pub extern "C" fn __dfsw___chunk_trace_lenfn_tt(
     };
 
     let lb = unsafe { dfsan_read_label(dst,len) };
-    // println!("lenfn_tt : {0},{1},{2},{3}", lb, len1, len2, len);
-    // println!("cons: {0} {1} {2}", is_cnst_dst,is_cnst_len1,is_cnst_len2);
+    println!("lenfn_tt : {0},{1},{2},{3}", lb, len1, len2, len);
+    println!("cons: {0} {1} {2}", is_cnst_dst,is_cnst_len1,is_cnst_len2);
 
     // lb先dst后len
     if (!is_cnst_dst) && (!is_cnst_len1){
