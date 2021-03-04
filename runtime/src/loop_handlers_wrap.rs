@@ -192,7 +192,7 @@ pub extern "C" fn __dfsw___chunk_trace_cmp_tt(
             // lb1和lb2都taint的情况还需要记cond
         }
         */
-        println!("Loop Length <{0} {1}>", lb1, lb2);
+        // println!("Loop Length <{0} {1}>", lb1, lb2);
         log_cond(0, size, lb1 as u64, lb2 as u64, ChunkField::Length);
         return;
     }
@@ -230,17 +230,17 @@ pub extern "C" fn __dfsw___chunk_trace_cmp_tt(
             let size1 = if list1.len()>0 { list1[list1.len()-1].end-list1[0].begin} else {0};
             let size2 = if list2.len()>0 { list2[list2.len()-1].end-list2[0].begin} else {0};
 
-            __angora_tag_set_show(lb1.try_into().unwrap());
-            __angora_tag_set_show(lb2.try_into().unwrap());
-            println!("size {0},arg1 {1},arg2 {2}", size, size1, size2);
+            // __angora_tag_set_show(lb1.try_into().unwrap());
+            // __angora_tag_set_show(lb2.try_into().unwrap());
+            // println!("size {0},arg1 {1},arg2 {2}", size, size1, size2);
             
             // op为0 size用payload长度 lb1是metadata lb2是payload
             if size2 > 3*size1 {
                 log_cond(0, size2, lb1 as u64, lb2 as u64, ChunkField::Checksum);
-                println!("__chunk_trace_cmp_tt : <{0}, {1}, checksum>", lb1, lb2);
+                // println!("__chunk_trace_cmp_tt : <{0}, {1}, checksum>", lb1, lb2);
             } else if size1 > 3*size2 {
                 log_cond(0, size1, lb2 as u64, lb1 as u64, ChunkField::Checksum);
-                println!("__chunk_trace_cmp_tt : <{1}, {0}, checksum>", lb1, lb2);
+                // println!("__chunk_trace_cmp_tt : <{1}, {0}, checksum>", lb1, lb2);
             }
             return;
         }
@@ -366,7 +366,7 @@ pub extern "C" fn __dfsw___chunk_trace_offsfn_tt(
     // op用来指示相对or绝对 0 文件头 1 当前位置 2 文件尾
     if !is_cnst_idx && l0 !=0 {
         log_cond(op, index as u32, l0 as u64, 0, ChunkField::Offset);
-        println!("__chunk_trace_offsfn_tt : <{0},{1}, offset>", l0, op);
+        // println!("__chunk_trace_offsfn_tt : <{0},{1}, offset>", l0, op);
     }
 }
 
@@ -402,18 +402,18 @@ pub extern "C" fn __dfsw___chunk_trace_lenfn_tt(
     };
 
     let lb = unsafe { dfsan_read_label(dst,len) };
-    println!("lenfn_tt : {0},{1},{2},{3}", lb, len1, len2, len);
-    println!("cons: {0} {1} {2}", is_cnst_dst,is_cnst_len1,is_cnst_len2);
+    // println!("lenfn_tt : {0},{1},{2},{3}", lb, len1, len2, len);
+    // println!("cons: {0} {1} {2}", is_cnst_dst,is_cnst_len1,is_cnst_len2);
 
     // lb先dst后len
     if (!is_cnst_dst) && (!is_cnst_len1){
         log_cond(0, len as u32, lb as u64, l1 as u64, ChunkField::Length);
-        println!("__chunk_trace_lenfn_tt : <{0},{1},len>", lb, l1);
+        // println!("__chunk_trace_lenfn_tt : <{0},{1},len>", lb, l1);
     }
 
     if len2!=0 && (!is_cnst_dst) && (!is_cnst_len2) {
         log_cond(0, len as u32, lb as u64, l2 as u64, ChunkField::Length);
-        println!("__chunk_trace_lenfn_tt : <{0},{1},len>", lb, l2);
+        // println!("__chunk_trace_lenfn_tt : <{0},{1},len>", lb, l2);
     }
 
 }
@@ -462,7 +462,7 @@ fn log_enum(
 ) {
     // 在hashmap里查找lb，把magic_byte插入到candidates里
     if enums.len() != size as usize{
-        println!("size error");
+        // println!("size error");
         return;
     }
     let mut lcl = LC.lock().expect("Could not lock LC.");

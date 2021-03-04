@@ -90,7 +90,10 @@ impl Logger {
 
         self.save_tag(cond.lb1);
         self.save_tag(cond.lb2);
-        self.data.cond_list.push(cond);
+
+        if !self.data.cond_list.contains(&cond) {
+            self.data.cond_list.push(cond);
+        }
     }
 
     pub fn output_logs(&self, s: &mut String) {
@@ -108,7 +111,9 @@ impl Logger {
             s.push_str(&format!("}})\n"));
         }
         for i in &self.data.cond_list {
-            s.push_str(&format!("({:016X}, {:016X}, {:?}, {})\n", i.lb1, i.lb2, i.field, i.op));
+            if i.field != ChunkField::Constraint {
+                s.push_str(&format!("({:016X}, {:016X}, {:?}, {})\n", i.lb1, i.lb2, i.field, i.op));
+            }
         }
     }
 
