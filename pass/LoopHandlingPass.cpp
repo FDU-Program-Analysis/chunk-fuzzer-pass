@@ -187,14 +187,16 @@ struct LoopHandlingPass : public ModulePass {
   void processCallInst(Instruction *Inst);
   void processLoadInst(Instruction *Cond, Instruction *InsertPoint);
 
-  void getAnalysisUsage(AnalysisUsage &AU) const {
-    // AU.addRequired<LoopInfo>();
-    // AU.addPreserved<LoopInfo>();
+  void getAnalysisUsage(AnalysisUsage &AU) const override {
+
     AU.addRequiredID(LoopSimplifyID);
-    AU.addPreservedID(LoopSimplifyID);
+    AU.addRequired<ScalarEvolutionWrapperPass>();
     AU.addRequired<LoopInfoWrapperPass>();
     AU.addRequired<DominatorTreeWrapperPass>();
-    AU.addRequired<ScalarEvolutionWrapperPass>();
+
+    AU.addPreserved<ScalarEvolutionWrapperPass>();
+    AU.addPreserved<LoopInfoWrapperPass>();
+    AU.addPreserved<DominatorTreeWrapperPass>();
     AU.setPreservesAll();
   }
 };
@@ -745,8 +747,7 @@ bool LoopHandlingPass::runOnModule(Module &M) {
     if (F.isDeclaration() ||F.getName().startswith(StringRef("__chunk_")) || F.getName().startswith(StringRef("__dfsw_")) || F.getName().startswith(StringRef("asan.module"))) {
       continue;
     }
-    DominatorTree DT(F);
-    LoopInfo LI(DT);
+    auto &LI = getAnalysis<LoopInfoWrapperPass>(F).getLoopInfo();
     std::set<BasicBlock *> loop_header_set;
     for (LoopInfo::iterator LIT = LI.begin(), LEND = LI.end(); LIT != LEND; ++LIT) {
       Loop *LoopI = *LIT;
@@ -777,11 +778,11 @@ bool LoopHandlingPass::runOnModule(Module &M) {
 
     for (LoopInfo::iterator LIT = LI.begin(), LEND = LI.end(); LIT != LEND; ++LIT) {
       Loop *L = *LIT;
-      llvm::printLoop(*L, errs());
+      // llvm::printLoop(*L, errs());
       u32 hLoop = getLoopId(L);
-      if (!L->isLoopSimplifyForm()) {
-        errs() << "not simplify "<< hLoop <<"\n";
-      }
+      // if (!L->isLoopSimplifyForm()) {
+      //   errs() << "not simplify "<< hLoop <<"\n";
+      // }
       ConstantInt *HLoop = ConstantInt::get(Int32Ty, hLoop);
       // Insert a global variable COUNTER in the current function.This will insert a declaration into M
       char hexTmp[10];
@@ -806,7 +807,7 @@ bool LoopHandlingPass::runOnModule(Module &M) {
       SmallVector<BasicBlock *, 16> Exits;
       L->getUniqueExitBlocks(Exits);
       for(BasicBlock *BB : Exits) {
-        errs() << "\nexit block : \n" << *BB;
+        // errs() << "\nexit block : \n" << *BB;
         BasicBlock::iterator i = BB->begin();
         Instruction* ExitI =  &*i;
         IRBuilder<> ExitBuilder(ExitI);
