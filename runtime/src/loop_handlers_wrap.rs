@@ -184,14 +184,6 @@ pub extern "C" fn __dfsw___chunk_trace_cmp_tt(
     infer_shape(lb2, size);
 
     if is_loop == 1 {
-        /*
-        let mut osl = OS.lock().unwrap();
-        if let Some(ref mut os) = *osl {
-            // let lb_payload = os.get_length_payload(op, size, lb1, lb2);
-            // log_length();
-            // lb1和lb2都taint的情况还需要记cond
-        }
-        */
         // println!("Loop Length <{0} {1}>", lb1, lb2);
         log_cond(0, size, lb1 as u64, lb2 as u64, ChunkField::Length);
         return;
@@ -323,8 +315,8 @@ pub extern "C" fn __dfsw___chunk_trace_cmpfn_tt(
         (size as usize, size as usize)
     };
 
-    let lb1 = unsafe { dfsan_read_label(parg1, arglen1) } as u64;
-    let lb2 = unsafe { dfsan_read_label(parg2, arglen2) } as u64;
+    let lb1 = unsafe { dfsan_read_label(parg1, arglen1) };
+    let lb2 = unsafe { dfsan_read_label(parg2, arglen2) };
 
     if lb1 == 0 && lb2 == 0 {
         return;
@@ -333,12 +325,29 @@ pub extern "C" fn __dfsw___chunk_trace_cmpfn_tt(
     let arg1 = unsafe { slice::from_raw_parts(parg1 as *mut u8, arglen1) }.to_vec();
     let arg2 = unsafe { slice::from_raw_parts(parg2 as *mut u8, arglen2) }.to_vec();
     if lb1 > 0  && lb2 > 0 {
-        log_cond(defs::COND_FN_OP, arglen1 as u32, lb1, lb2, ChunkField::Constraint); // op need check
+        log_cond(defs::COND_FN_OP, arglen1 as u32, lb1 as u64, lb2 as u64, ChunkField::Constraint); // op need check
+        let mut osl = OS.lock().unwrap();
+        if let Some(ref mut os) = *osl {
+            infer_shape(lb1, arglen1 as u32);
+            infer_shape(lb2, arglen2 as u32);
+            os.get_load_label(lb1);
+            os.get_load_label(lb2);
+        }
     }
     else if lb1 > 0 {
-        log_enum(arglen2 as u32, lb1, arg2);
+        log_enum(arglen2 as u32, lb1 as u64, arg2);
+        let mut osl = OS.lock().unwrap();
+        if let Some(ref mut os) = *osl {
+            infer_shape(lb1, arglen1 as u32);
+            os.get_load_label(lb1);
+        }
     }else if lb2 > 0 {
-        log_enum(arglen1 as u32, lb2, arg1);
+        log_enum(arglen1 as u32, lb2 as u64, arg1);
+        let mut osl = OS.lock().unwrap();
+        if let Some(ref mut os) = *osl {
+            infer_shape(lb2, arglen2 as u32);
+            os.get_load_label(lb2);
+        }
     }
 }
 
@@ -367,6 +376,11 @@ pub extern "C" fn __dfsw___chunk_trace_offsfn_tt(
     if !is_cnst_idx && l0 !=0 {
         log_cond(op, index as u32, l0 as u64, 0, ChunkField::Offset);
         // println!("__chunk_trace_offsfn_tt : <{0},{1}, offset>", l0, op);
+        let mut osl = OS.lock().unwrap();
+        if let Some(ref mut os) = *osl {
+            // infer_shape(l0, arglen1 as u32);
+            os.get_load_label(l0);
+        }
     }
 }
 
@@ -408,11 +422,21 @@ pub extern "C" fn __dfsw___chunk_trace_lenfn_tt(
     // lb先dst后len
     if (!is_cnst_dst) && (!is_cnst_len1){
         log_cond(0, len as u32, lb as u64, l1 as u64, ChunkField::Length);
+        let mut osl = OS.lock().unwrap();
+        if let Some(ref mut os) = *osl {
+            os.get_load_label(lb);
+            os.get_load_label(l1);
+        }
         // println!("__chunk_trace_lenfn_tt : <{0},{1},len>", lb, l1);
     }
 
     if len2!=0 && (!is_cnst_dst) && (!is_cnst_len2) {
         log_cond(0, len as u32, lb as u64, l2 as u64, ChunkField::Length);
+        let mut osl = OS.lock().unwrap();
+        if let Some(ref mut os) = *osl {
+            os.get_load_label(lb);
+            os.get_load_label(l2);
+        }
         // println!("__chunk_trace_lenfn_tt : <{0},{1},len>", lb, l2);
     }
 
