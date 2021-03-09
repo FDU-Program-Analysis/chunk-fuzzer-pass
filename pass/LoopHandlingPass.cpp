@@ -7,6 +7,8 @@ make
 opt -load-pass-plugin ./libLoopHandlingPass.so -passes=loop-handling-pass -f ../test/loopTest.ll
  OR
 opt -load ./libLoopHandlingPass.so --legacy-loop-handling-pass ../test/loopTest.ll
+ OR 
+clang loopTest.bc -o loopTest-loop.ll -Xclang -load -Xclang ../../install/pass/libLoopHandlingPass.so -mllvm -chunk-exploitation-list=../../install/rules/exploitation_list.txt -Xclang -load -Xclang ../../install/pass/libDFSanPass.so -mllvm -chunk-dfsan-abilist=../../install/rules/angora_abilist.txt -mllvm -chunk-dfsan-abilist=../../install/rules/dfsan_abilist.txt -emit-llvm -S
 
 
 
@@ -722,22 +724,16 @@ void LoopHandlingPass::processLoadInst(Instruction *Inst, Instruction *InsertPoi
                   LoadOpr, Int8PtrTy, "loadOprPtr");
     CallInst *CallI = IRB.CreateCall(LoadLabelDumpFn, {LoadOprPtr, size});
   }
-  
-}
-/*
-bool LoopHandlingPass::checkInHeader(BasicBlock *B, Instruction* Inst){
-  for(BasicBlock::iterator it = B->begin();it!=B->end();++it){
-    // outs() << *Inst << "\n";
-    // outs() << *it << '\n';
-    if(it->isIdenticalTo(Inst)) {
-      // outs() <<"found" << "\n";
-      return true;
-    }
+  /*
+  else {
+    errs() << "LoadI: " << *LoadI << "\n";
+    errs() << "VarName" << VarName << "\n";
+    errs() << "VarType" << *VarType << "\n";
+    errs() << "TySize" << TySize << "\n";
   }
-  // outs() << "not found\n";
-  return false;
+  */
 }
-*/
+
 
 bool LoopHandlingPass::runOnModule(Module &M) {
 
