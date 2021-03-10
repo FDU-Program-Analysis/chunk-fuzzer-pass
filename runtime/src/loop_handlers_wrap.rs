@@ -108,6 +108,11 @@ pub extern "C" fn __dfsw___chunk_pop_obj(
     loop_hash: u32,
     _l0: DfsanLabel,
 ) -> bool {
+    let mut lcl = LC.lock().expect("Could not lock LC.");
+    if let Some(ref mut lc) = *lcl {
+        lc.enums_clean();
+    }
+    
     let mut osl = OS.lock().unwrap();
     if let Some(ref mut os) = *osl {
         os.pop_obj(loop_hash);
@@ -115,6 +120,7 @@ pub extern "C" fn __dfsw___chunk_pop_obj(
     } else {
         panic!("POP ERROR!");
     }
+
 }
 
 #[no_mangle]

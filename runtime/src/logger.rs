@@ -96,6 +96,21 @@ impl Logger {
         }
     }
 
+    pub fn enums_clean(&mut self){
+        let mut del = vec![];
+
+        for (key, value) in &self.data.enums {
+            if value.len() == 1 {
+                let target = key.clone();
+                del.push(target);
+            }
+        }
+        
+        for key in del {
+            &self.data.enums.remove(&key);
+        }
+    }
+
     pub fn output_logs(&self, s: &mut String) {
         // output：(lb1，lb2, field, remarks)
         // remarks: Enum's candidate; Constraints's op; offset's absolute/relatively
