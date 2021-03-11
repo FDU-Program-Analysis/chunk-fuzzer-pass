@@ -396,7 +396,6 @@ impl ObjectStack {
         let end = "end";
         // let field = "type";
         let str_son = "son";
-        let mut son_flag = false;
         s.push_str(&format!("{}\"{:016X}\":\n", blank, ttsg.lb));
         s.push_str(&format!("{}{{\n",blank));
         //need check lb
@@ -483,9 +482,9 @@ impl Drop for ObjectStack {
 }
 
 // print_type_of(&xxx);
-fn print_type_of<T>(_: &T) {
-    println!("{}", std::any::type_name::<T>())
-}
+// fn print_type_of<T>(_: &T) {
+//     println!("{}", std::any::type_name::<T>())
+// }
 
 
 pub fn hash_combine(

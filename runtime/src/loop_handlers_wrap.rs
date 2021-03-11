@@ -1,6 +1,6 @@
 use super::*;
 use crate::{loop_handlers::ObjectStack, tag_set_wrap::*};
-use angora_common::{tag::*, cond_stmt_base::*, defs};
+use angora_common::{cond_stmt_base::*, defs};
 use lazy_static::lazy_static;
 use std::{slice, sync::Mutex, ffi::CStr};
 use libc::c_char;
@@ -26,8 +26,8 @@ pub extern "C" fn __chunk_get_load_label(
 pub extern "C" fn __dfsw___chunk_get_load_label(
     addr: *const i8, 
     size: usize,
-    l0: DfsanLabel,
-    l1: DfsanLabel,
+    _l0: DfsanLabel,
+    _l1: DfsanLabel,
 ) {
     let mut osl = OS.lock().unwrap();
     if let Some(ref mut os) = *osl {
@@ -108,11 +108,7 @@ pub extern "C" fn __dfsw___chunk_pop_obj(
     loop_hash: u32,
     _l0: DfsanLabel,
 ) -> bool {
-    let mut lcl = LC.lock().expect("Could not lock LC.");
-    if let Some(ref mut lc) = *lcl {
-        lc.enums_clean();
-    }
-    
+
     let mut osl = OS.lock().unwrap();
     if let Some(ref mut os) = *osl {
         os.pop_obj(loop_hash);
@@ -266,14 +262,14 @@ pub extern "C" fn __dfsw___chunk_trace_switch_tt(
     _condition: u64,
     num: u32,
     args: *mut u64,
-    is_loop: u8,
-    l0: DfsanLabel,
-    _l1: DfsanLabel,
+    _is_loop: u8,
+    _l0: DfsanLabel,
+    l1: DfsanLabel,
     _l2: DfsanLabel,
     _l3: DfsanLabel,
     _l4: DfsanLabel,
 ) {
-    let lb = l0;
+    let lb = l1;
     if lb == 0 {
         return;
     }
@@ -384,7 +380,6 @@ pub extern "C" fn __dfsw___chunk_trace_offsfn_tt(
         // println!("__chunk_trace_offsfn_tt : <{0},{1}, offset>", l0, op);
         let mut osl = OS.lock().unwrap();
         if let Some(ref mut os) = *osl {
-            // infer_shape(l0, arglen1 as u32);
             os.get_load_label(l0);
         }
     }

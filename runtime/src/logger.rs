@@ -1,8 +1,10 @@
-use bincode::{deserialize_from, serialize_into};
-use std::{collections::HashMap, env, fs::File, io::prelude::*, path::Path};
+// use bincode::{deserialize_from, serialize_into};
+// use std::{collections::HashMap, env, fs::File, io::prelude::*, path::Path};
+use std::{fs::File, io::prelude::*};
 
 // use crate::{len_label, tag_set_wrap};
-use angora_common::{cond_stmt_base::*, config, defs, log_data::LogData};
+// use angora_common::{cond_stmt_base::*, config, defs, log_data::LogData};
+use angora_common::{cond_stmt_base::*, log_data::LogData};
 
 #[derive(Debug)]
 pub struct Logger {
@@ -145,7 +147,10 @@ impl Logger {
         }
     }
 
-    fn fini(&self) {
+    fn fini(&mut self) {
+
+        self.enums_clean();
+        
         // if let Some(fd) = &self.fd {
         let mut fd = File::create("track.log").expect("Unable to create log file");
         let mut s = String::new();
