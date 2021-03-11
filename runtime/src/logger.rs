@@ -96,23 +96,38 @@ impl Logger {
         }
     }
 
+    pub fn enums_clean(&mut self){
+        let mut del = vec![];
+
+        for (key, value) in &self.data.enums {
+            if value.len() == 1 {
+                let target = key.clone();
+                del.push(target);
+            }
+        }
+        
+        for key in del {
+            &self.data.enums.remove(&key);
+        }
+    }
+
     pub fn output_logs(&self, s: &mut String) {
         // output：(lb1，lb2, field, remarks)
         // remarks: Enum's candidate; Constraints's op; offset's absolute/relatively
         for (key,value) in &self.data.enums {
-            s.push_str(&format!("({:016X}, {:016X}, Enum, {{",key,0));
+            s.push_str(&format!("({:016X};{:016X};Enum;{};{{",key,0,value.len()));
             for vi in value {
                 // let enumi = match String::from_utf8(vi.to_vec()) {
                 //     Ok(v) => v,
                 //     Err(e) => panic!("invalid utf-8 sequence: {}",e),
                 // };
-                s.push_str(&format!("{:02X?}, ",vi));
+                s.push_str(&format!("{:02X?};",vi));
             }
             s.push_str(&format!("}})\n"));
         }
         for i in &self.data.cond_list {
             if i.field != ChunkField::Constraint {
-                s.push_str(&format!("({:016X}, {:016X}, {:?}, {})\n", i.lb1, i.lb2, i.field, i.op));
+                s.push_str(&format!("({:016X};{:016X};{:?};{})\n", i.lb1, i.lb2, i.field, i.op));
             }
         }
     }

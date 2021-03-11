@@ -92,7 +92,7 @@ impl ObjectStack {
     )-> Vec<TaintSeg> {
         list.sort_by(|a, b| {
             match a.begin.cmp(&b.begin) {
-                Ordering::Equal => b.begin.cmp(&a.begin),
+                Ordering::Equal => b.end.cmp(&a.end),
                 other => other,
             }
         });
@@ -139,7 +139,7 @@ impl ObjectStack {
     ) {
         list.sort_by(|a, b| {
             match a.begin.cmp(&b.begin) {
-                Ordering::Equal => b.begin.cmp(&a.begin),
+                Ordering::Equal => b.end.cmp(&a.end),
                 other => other,
             }
         });
@@ -388,6 +388,7 @@ impl ObjectStack {
         s: &mut String,
         ttsg: &TaintSeg,
         depth: usize,
+        is_last: bool,
     ){
         let blank = "  ".repeat(depth);
         let blank2 = "  ".repeat(depth+1);
@@ -400,27 +401,36 @@ impl ObjectStack {
         s.push_str(&format!("{}{{\n",blank));
         //need check lb
         s.push_str(&format!("{}\"{}\": {},\n",blank2, start, ttsg.begin)); //    "start": 0,
-        s.push_str(&format!("{}\"{}\": {},\n",blank2, end, ttsg.end));     //    "end": 8,
         if ttsg.son.is_none() {
-            s.push_str(&format!("{}}},\n",blank));
+            s.push_str(&format!("{}\"{}\": {}\n",blank2, end, ttsg.end));
+            if is_last {
+                s.push_str(&format!("{}}}\n",blank));
+            }
+            else {
+                s.push_str(&format!("{}}},\n",blank));
+            }
             return;
         }
+        s.push_str(&format!("{}\"{}\": {},\n",blank2, end, ttsg.end));     //    "end": 8,
         let ttsg_sons = ttsg.son.as_ref().unwrap();
-        if ttsg_sons.len() > 1 {
-            son_flag = true;
-        }
-        if son_flag {
-            s.push_str(&format!("{}\"{}\": {{\n",blank2, str_son)); 
-        }
+        s.push_str(&format!("{}\"{}\": {{\n",blank2, str_son)); 
         for i in 0 .. ttsg_sons.len() {
         // for (&i_sum, &i_son) in &label.sum.iter().zip(&label.son.iter()) {
-            loop_handlers::ObjectStack::output_format(s, &ttsg_sons[i], depth+1);
+            if i == ttsg_sons.len() - 1 {
+                loop_handlers::ObjectStack::output_format(s, &ttsg_sons[i], depth+1, true);
+            }
+            else {
+                loop_handlers::ObjectStack::output_format(s, &ttsg_sons[i], depth+1, false);
+            }
             // s.push_str(&format!("{}}},\n",blank));
         }
-        if son_flag {
-            s.push_str(&format!("{}}}\n",blank2)); 
+        s.push_str(&format!("{}}}\n",blank2));
+        if is_last {
+            s.push_str(&format!("{}}}\n",blank));
+        } 
+        else {
+            s.push_str(&format!("{}}},\n",blank));
         }
-        s.push_str(&format!("{}}},\n",blank));
     }
 
     pub fn set_input_file_name(
@@ -438,9 +448,16 @@ impl ObjectStack {
     ) {
         let mut s = String::new();
         loop_handlers::ObjectStack::minimize_list(&mut self.objs[self.cur_id].sum);
+        s.push_str(&format!("{{\n"));
         for i in &self.objs[self.cur_id].sum {
-            loop_handlers::ObjectStack::output_format(&mut s, &i, 0);
+            if &i == &self.objs[self.cur_id].sum.last().unwrap() {
+                loop_handlers::ObjectStack::output_format(&mut s, &i, 0, true);
+            }
+            else {
+                loop_handlers::ObjectStack::output_format(&mut s, &i, 0, true);
+            }
         }
+        s.push_str(&format!("}}\n"));
         if self.file_name.len() == 0 {
             let timestamp = {
                 let start = SystemTime::now();
