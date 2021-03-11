@@ -101,8 +101,21 @@ impl Logger {
 
         for (key, value) in &self.data.enums {
             if value.len() == 1 {
-                let target = key.clone();
-                del.push(target);
+                // check valid byte
+                let v_len = value[0].len();
+                let mut invalid_byte = 0;
+                for i in 0 .. v_len {
+                    if value[0][i] == 0 {
+                        invalid_byte += 1;
+                    }
+                    else {
+                        invalid_byte = 0;
+                    }
+                }
+                if v_len - invalid_byte == 1 {
+                    let target = key.clone();
+                    del.push(target);
+                }
             }
         }
         
