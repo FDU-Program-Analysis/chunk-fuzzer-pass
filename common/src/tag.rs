@@ -18,6 +18,18 @@ pub struct TaintSeg {
     //pub is_loop: bool,
 }
 
+#[derive(PartialEq, Eq, Ord, PartialOrd, Debug, Clone, Copy, Hash)]
+pub enum SegRelation {
+    Same,
+    Son,
+    Father,
+    LeftConnect,
+    RightConnect,
+    LeftOverlap,
+    RightOverlap,
+    Disjoint,
+}
+
 /*
 impl TaintSeg {
     pub fn new(

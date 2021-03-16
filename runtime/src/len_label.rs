@@ -1,7 +1,7 @@
 // Specail case for input length relative labels
 
 use super::*;
-use angora_common::{defs};
+// use angora_common::{defs};
 use lazy_static::lazy_static;
 use std::sync::Mutex;
 

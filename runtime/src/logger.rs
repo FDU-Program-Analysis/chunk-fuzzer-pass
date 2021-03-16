@@ -36,6 +36,9 @@ impl Logger {
     //     log_name.replace("json", "log");
     //     self.file_name = log_name.to_string();
     // }
+    pub fn find_tag_lb(&self, lb: u64) -> bool {
+        self.data.tags.contains_key(&lb)
+    }
 
     pub fn save_tag(&mut self, lb: u64) -> bool {
         if lb > 0 {
@@ -52,6 +55,12 @@ impl Logger {
             false
         }
 
+    }
+
+    pub fn save_linear_constraint(&mut self, lb: u32) {
+        if !self.data.linear_constraint.contains(&lb) {
+            self.data.linear_constraint.push(lb)
+        }
     }
 
     pub fn save_enums(&mut self, lb: u64, bytes: Vec<u8>) {
@@ -124,6 +133,8 @@ impl Logger {
         for key in del {
             &self.data.enums.remove(&key);
         }
+        let enum_clone = self.data.enums.clone();
+        self.data.cond_list.retain(|&item| enum_clone.contains_key(&item.lb1) == false);
     }
 
     pub fn output_logs(&self, s: &mut String) {
