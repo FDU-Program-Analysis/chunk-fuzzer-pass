@@ -1,8 +1,10 @@
-use bincode::{deserialize_from, serialize_into};
-use std::{collections::HashMap, env, fs::File, io::prelude::*, path::Path};
+// use bincode::{deserialize_from, serialize_into};
+// use std::{collections::HashMap, env, fs::File, io::prelude::*, path::Path};
+use std::{fs::File, io::prelude::*};
 
 // use crate::{len_label, tag_set_wrap};
-use angora_common::{cond_stmt_base::*, config, defs, log_data::LogData};
+// use angora_common::{cond_stmt_base::*, config, defs, log_data::LogData};
+use angora_common::{cond_stmt_base::*, log_data::LogData};
 
 #[derive(Debug)]
 pub struct Logger {
@@ -34,6 +36,9 @@ impl Logger {
     //     log_name.replace("json", "log");
     //     self.file_name = log_name.to_string();
     // }
+    pub fn find_tag_lb(&self, lb: u64) -> bool {
+        self.data.tags.contains_key(&lb)
+    }
 
     pub fn save_tag(&mut self, lb: u64) -> bool {
         if lb > 0 {
@@ -50,6 +55,12 @@ impl Logger {
             false
         }
 
+    }
+
+    pub fn save_linear_constraint(&mut self, lb: u32) {
+        if !self.data.linear_constraint.contains(&lb) {
+            self.data.linear_constraint.push(lb)
+        }
     }
 
     pub fn save_enums(&mut self, lb: u64, bytes: Vec<u8>) {
@@ -101,14 +112,29 @@ impl Logger {
 
         for (key, value) in &self.data.enums {
             if value.len() == 1 {
-                let target = key.clone();
-                del.push(target);
+                // check valid byte
+                let v_len = value[0].len();
+                let mut invalid_byte = 0;
+                for i in 0 .. v_len {
+                    if value[0][i] == 0 {
+                        invalid_byte += 1;
+                    }
+                    else {
+                        invalid_byte = 0;
+                    }
+                }
+                if v_len - invalid_byte == 1 {
+                    let target = key.clone();
+                    del.push(target);
+                }
             }
         }
         
         for key in del {
             &self.data.enums.remove(&key);
         }
+        let enum_clone = self.data.enums.clone();
+        self.data.cond_list.retain(|&item| enum_clone.contains_key(&item.lb1) == false);
     }
 
     pub fn output_logs(&self, s: &mut String) {
@@ -132,7 +158,10 @@ impl Logger {
         }
     }
 
-    fn fini(&self) {
+    fn fini(&mut self) {
+
+        self.enums_clean();
+        
         // if let Some(fd) = &self.fd {
         let mut fd = File::create("track.log").expect("Unable to create log file");
         let mut s = String::new();

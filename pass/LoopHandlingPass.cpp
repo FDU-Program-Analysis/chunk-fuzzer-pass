@@ -4,9 +4,7 @@ cmake -DCMAKE_BUILD_TYPR=Debug .
 make
 
 #RUN#
-opt -load-pass-plugin ./libLoopHandlingPass.so -passes=loop-handling-pass -f ../test/loopTest.ll
- OR
-opt -load ./libLoopHandlingPass.so --legacy-loop-handling-pass ../test/loopTest.ll
+opt -load ./libLoopHandlingPass.so --loop-handling-pass ../test/loopTest.ll
  OR 
 clang loopTest.bc -o loopTest-loop.ll -Xclang -load -Xclang ../../install/pass/libLoopHandlingPass.so -mllvm -chunk-exploitation-list=../../install/rules/exploitation_list.txt -Xclang -load -Xclang ../../install/pass/libDFSanPass.so -mllvm -chunk-dfsan-abilist=../../install/rules/angora_abilist.txt -mllvm -chunk-dfsan-abilist=../../install/rules/dfsan_abilist.txt -emit-llvm -S
 
@@ -16,7 +14,7 @@ clang loopTest.bc -o loopTest-loop.ll -Xclang -load -Xclang ../../install/pass/l
 
 gdb opt
 b llvm::Pass::preparePassManager
-r -load ./libLoopHandlingPass.so --legacy-loop-handling-pass < ../test/loopTest.ll > /dev/null
+r -load ./libLoopHandlingPass.so --loop-handling-pass < ../test/loopTest.ll > /dev/null
 b loopHandler
 b 
 */
@@ -365,8 +363,7 @@ void LoopHandlingPass::initVariables(Module &M) {
     ChunkCmpTT = M.getOrInsertFunction("__chunk_trace_cmp_tt", ChunkCmpTtTy, AL);   
   }
   
-  //Int64PtrTy,
-  Type *ChunkSwTtArgs[4] = {Int32Ty, Int64Ty, Int32Ty,Int8Ty};
+  Type *ChunkSwTtArgs[5] = {Int32Ty, Int64Ty, Int32Ty, Int64PtrTy, Int8Ty};
   ChunkSwTtTy = FunctionType::get(VoidTy, ChunkSwTtArgs, false);
   {
     AttributeList AL;
