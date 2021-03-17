@@ -205,7 +205,7 @@ pub extern "C" fn __dfsw___chunk_trace_cmp_tt(
             let vec8 = arg2.to_le_bytes().to_vec();
             let slice_vec8 = &vec8[..size as usize];
             let vec8 = slice_vec8.to_vec();
-            
+            //println!("Loop enum <{0} {1} {2} {3}>", arg1, lb1, arg2, lb2);
             log_enum(size, lb1 as u64, vec8);
             return;
         }
@@ -278,6 +278,7 @@ pub extern "C" fn __dfsw___chunk_trace_switch_tt(
         return;
     }
     infer_shape(lb, size);
+    //println!("switch enum <{0}>", lb);
 
     // let mut op = defs::COND_ICMP_EQ_OP;
     let sw_args = unsafe { slice::from_raw_parts(args, num as usize) }.to_vec();
@@ -389,6 +390,39 @@ pub extern "C" fn __dfsw___chunk_trace_offsfn_tt(
         }
     }
 }
+
+#[no_mangle]
+pub extern "C" fn __chunk_trace_idx_tt(
+    _a: u32,
+    _b: u32,
+    _c: u8,
+) {
+    panic!("Forbid calling __chunk_trace_idx_tt directly");
+}
+
+#[no_mangle]
+pub extern "C" fn __dfsw___chunk_trace_idx_tt(
+    src: i32,
+    idx: u32,
+    is_cnst_idx: bool,
+    l0: DfsanLabel,
+    l1: DfsanLabel,
+    _l2: DfsanLabel,
+) {
+    // size暂时用index填充
+    // op用3来填充，表示是数组index的类型
+    // l0是src，l1是index
+    if !is_cnst_idx && l1 !=0 {
+        log_cond(3, idx as u32, l0 as u64, l1 as u64, ChunkField::Offset);
+        // println!("__chunk_trace_offsfn_tt : <{0},{1}, offset>", l0, op);
+        let mut osl = OS.lock().unwrap();
+        if let Some(ref mut os) = *osl {
+            // infer_shape(l0, arglen1 as u32);
+            os.get_load_label(l0);
+        }
+    }
+}
+
 
 pub extern "C" fn __chunk_trace_lenfn_tt(
     _a: u32,

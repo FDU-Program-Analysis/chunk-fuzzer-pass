@@ -15,7 +15,6 @@ clang loopTest.bc -o loopTest-loop.ll -Xclang -load -Xclang ../../install/pass/l
 #DEBUG#
 
 gdb opt
-b llvm::Pass::preparePassManager
 r -load ./libLoopHandlingPass.so --legacy-loop-handling-pass < ../test/loopTest.ll > /dev/null
 b loopHandler
 b 
@@ -147,6 +146,7 @@ struct LoopHandlingPass : public ModulePass {
   FunctionType *ChunkCmpFnTtTy;
   FunctionType *ChunkLenFnTtTy;
   FunctionType *ChunkOffsFnTtTy;
+  FunctionType *ChunkIdxFnTtTy;
 
   FunctionCallee PrintfFn;
   FunctionCallee LoadLabelDumpFn;
@@ -159,6 +159,7 @@ struct LoopHandlingPass : public ModulePass {
   FunctionCallee ChunkCmpFnTT;
   FunctionCallee ChunkLenFnTT;
   FunctionCallee ChunkOffsFnTT;
+  FunctionCallee ChunkIdxTT;
 
 
   LoopHandlingPass() : ModulePass(ID) {}
@@ -183,6 +184,7 @@ struct LoopHandlingPass : public ModulePass {
   void visitSwitchInst(Module &M, Instruction *Inst, bool loop);
   void visitCmpInst(Instruction *Inst, bool loop);
   void visitExploitation(Instruction *Inst);
+  void visitIndexInst(Instruction *Inst);
 
   void processCmp(Instruction *Cond, Instruction *InsertPoint, bool loop);
   void processBoolCmp(Value *Cond, Instruction *InsertPoint,bool loop);
@@ -410,6 +412,17 @@ void LoopHandlingPass::initVariables(Module &M) {
     ChunkLenFnTT = M.getOrInsertFunction("__chunk_trace_lenfn_tt", ChunkLenFnTtTy, AL);   
   }
 
+  Type *ChunkIdxTtArgs[6] = {Int32Ty, Int32Ty, Int8Ty};
+  ChunkIdxTtTy = FunctionType::get(VoidTy, ChunkIdxTtArgs, false);
+  {
+    AttributeList AL;
+    AL = AL.addAttribute(CTX, AttributeList::FunctionIndex,
+                         Attribute::NoInline);
+    AL = AL.addAttribute(CTX, AttributeList::FunctionIndex,
+                         Attribute::OptimizeNone);
+    ChunkIdxTT = M.getOrInsertFunction("__chunk_trace_idx_tt", ChunkIdxTtTy, AL);   
+  }
+
   std::vector<std::string> AllExploitListFiles;
   AllExploitListFiles.insert(AllExploitListFiles.end(),
                              ClExploitListFiles.begin(),
@@ -607,10 +620,21 @@ void LoopHandlingPass::visitExploitation(Instruction *Inst) {
     CallInst *LenFnCall = AfterBuilder.CreateCall(ChunkLenFnTT, {dst, len, NumZero, is_cnst_dst, is_cnst_l1, BoolTrue});
     
   }
-
-  
+ 
 }
 
+// 现在把两个Inst写在一起
+void LoopHandlingPass::visitIndexInst(Instruction *Cond) {
+  unsigned int num = Cond->getNumOperands();
+
+  Value *src = Cond->getOprand(0);
+  
+  for(int i=1; i < num; i++) {
+    Value *idx = Cond->getOperand(i);
+    Value *is_cnst_idx =  isa<Constant>(idx)? BoolTrue : BoolFalse;
+    CallInst *IdxCall = AfterBuilder.CreateCall(ChunkIdxTT, {src,idx,is_cnst_idx});
+  }
+}
 
 void LoopHandlingPass::processCmp(Instruction *Cond, Instruction *InsertPoint, bool loop) {
   CmpInst *Cmp = dyn_cast<CmpInst>(Cond);
@@ -768,7 +792,9 @@ bool LoopHandlingPass::runOnModule(Module &M) {
           visitSwitchInst(M, &Inst, in_loop_header);
         } else if (isa<CmpInst>(&Inst)) {
           visitCmpInst(&Inst, in_loop_header);
-        }
+        } else if (isa<ExtractElementInst>(&Inst) || isa<GetElementPtrInst>(&Inst)) {
+          visitIndexInst(&Inst);
+        } 
       }
     }
 
