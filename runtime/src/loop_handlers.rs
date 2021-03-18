@@ -139,10 +139,22 @@ impl ObjectStack {
     ) {
         if let Some(ref mut son) = ancestor.son {
             for i in 0 .. son.len() {
-                if loop_handlers::ObjectStack::seg_relation(&son[i], &node) == SegRelation::Father {
-                    loop_handlers::ObjectStack::insert_node(&mut son[i], node);
-                    return;
-                }
+                match loop_handlers::ObjectStack::seg_relation(&son[i], &node) {
+                    SegRelation::Father => {
+                        loop_handlers::ObjectStack::insert_node(&mut son[i], node);
+                        return;
+                    },
+                    SegRelation::Same => {
+                        son[i].lb = min(son[i].lb, node.lb);
+                        if ! node.son.is_none() {
+                            let mut tmp = node.clone().son.unwrap();
+                            for son_i in tmp {
+                                loop_handlers::ObjectStack::insert_node(&mut son[i], son_i);
+                            }
+                        }
+                    },
+                    _ => {},
+                } 
             }
             son.push(node); //未排除son之间overlap情况
             son.sort_by(|a, b| {
@@ -209,7 +221,7 @@ impl ObjectStack {
                 other => other,
             }
         });
-        // println!("vec to minimize: {:?}", list);
+        println!("vec to minimize: {:?}", list);
         let mut new_list = vec![];
         let none_TS = TaintSeg{
             lb: 0,
@@ -224,18 +236,27 @@ impl ObjectStack {
             }
             else {
                 match loop_handlers::ObjectStack::seg_relation(&cur_TS, &list[i]) {
+                    SegRelation::Same => {
+                        cur_TS.lb = min(cur_TS.lb, list[i].lb);
+                        if ! list[i].son.is_none() {
+                            let mut tmp = list[i].clone().son.unwrap();
+                            for son_i in tmp {
+                                loop_handlers::ObjectStack::insert_node(&mut cur_TS, son_i);
+                            }
+                        }
+                    },
                     SegRelation::Father => {
-                        // println!("Father: cur_TS:{:?}, list[i]:{:?}", cur_TS, list[i]);
+                        println!("Father: cur_TS:{:?}, list[i]:{:?}", cur_TS, list[i]);
                         loop_handlers::ObjectStack::insert_node(&mut cur_TS, list[i].clone())
                     },
                     SegRelation::Son => {
-                        // println!("Son: cur_TS:{:?}, list[i]:{:?}", cur_TS, list[i]);
+                        println!("Son: cur_TS:{:?}, list[i]:{:?}", cur_TS, list[i]);
                         let prev_TS = cur_TS;
                         cur_TS = list[i].clone();
                         loop_handlers::ObjectStack::insert_node(&mut cur_TS, prev_TS);
                     },
                     SegRelation::RightConnect => {
-                        // println!("RightConnect: cur_TS:{:?}, list[i]:{:?}", cur_TS, list[i]);
+                        println!("RightConnect: cur_TS:{:?}, list[i]:{:?}", cur_TS, list[i]);
                         if loop_handlers::ObjectStack::find_lb(cur_TS.lb) { // error
                             let prev_TS = cur_TS.clone();
                             cur_TS = none_TS.clone();
@@ -263,7 +284,7 @@ impl ObjectStack {
                         //overlap的部分切开分为两个
                     },
                     SegRelation::Disjoint => {
-                        // println!("Disjoint: cur_TS:{:?}, list[i]:{:?}", cur_TS, list[i]);
+                        println!("Disjoint: cur_TS:{:?}, list[i]:{:?}", cur_TS, list[i]);
                         new_list.push(cur_TS);
                         cur_TS = list[i].clone();
                     },
@@ -274,7 +295,7 @@ impl ObjectStack {
         if cur_TS != none_TS {
             new_list.push(cur_TS);
         }
-        // println!("new_list:{:?}\n", new_list);
+        println!("new_list:{:?}\n", new_list);
         list.clear();
         list.append(&mut new_list);
     }
@@ -316,6 +337,7 @@ impl ObjectStack {
             }
             return;
         }
+        println!("load: lb {}, {:?}", lb, list);
         self.insert_labels(&mut list);
         return;
     }

@@ -66,6 +66,7 @@ pub extern "C" fn __dfsw___chunk_push_new_obj(
     if is_loop && loop_cnt != 0 {
         return;
     }
+    println!("push obj :{:X}", loop_hash);
     let mut osl = OS.lock().unwrap();
     if let Some(ref mut os) = *osl {
         os.new_obj(is_loop, loop_hash);
@@ -108,7 +109,7 @@ pub extern "C" fn __dfsw___chunk_pop_obj(
     loop_hash: u32,
     _l0: DfsanLabel,
 ) -> bool {
-
+    println!("pop obj :{:X}", loop_hash);
     let mut osl = OS.lock().unwrap();
     if let Some(ref mut os) = *osl {
         os.pop_obj(loop_hash);
@@ -408,18 +409,14 @@ pub extern "C" fn __chunk_trace_offsfn_tt(
 
 #[no_mangle]
 pub extern "C" fn __dfsw___chunk_trace_offsfn_tt(
-    index: i32,
-    op: u32,
-    is_cnst_idx: bool,
+    offset: i32,
+    whence: u32,
     l0: DfsanLabel,
     _l1: DfsanLabel,
-    _l2: DfsanLabel,
 ) {
-    // size暂时用index填充
-    // op用来指示相对or绝对 0 文件头 1 当前位置 2 文件尾
-    if !is_cnst_idx && l0 !=0 {
-        log_cond(op, index as u32, l0 as u64, 0, ChunkField::Offset);
-        // println!("__chunk_trace_offsfn_tt : <{0},{1}, offset>", l0, op);
+    // whence: SEEK_SET 0 ;SEEK_CUR 1; SEEK_END 2
+    if l0 != 0 {
+        log_cond(whence, offset as u32, l0 as u64, 0, ChunkField::Offset);
         let mut osl = OS.lock().unwrap();
         if let Some(ref mut os) = *osl {
             os.get_load_label(l0);
@@ -442,45 +439,39 @@ pub extern "C" fn __dfsw___chunk_trace_lenfn_tt(
     dst: *mut i8,
     len1: u32,
     len2: u32,
-    is_cnst_dst: bool,
-    is_cnst_len1: bool,
-    is_cnst_len2: bool,
-    _l0: DfsanLabel,
+    ret: u32,
+    l0: DfsanLabel,
     l1: DfsanLabel,
     l2: DfsanLabel,
-    _l3: DfsanLabel,
-    _l4: DfsanLabel,
-    _l5: DfsanLabel
+    l3: DfsanLabel,
 ) {
-    let len = if len2 == 0 {
-        len1 as usize
-    } else {
-        (len1*len2) as usize
-    };
+    if l1 == 0 && l2 == 0 {
+        return;
+    }
+
+    let len = ret as usize;
 
     let lb = unsafe { dfsan_read_label(dst,len) };
-    // println!("lenfn_tt : {0},{1},{2},{3}", lb, len1, len2, len);
-    // println!("cons: {0} {1} {2}", is_cnst_dst,is_cnst_len1,is_cnst_len2);
+    println!("lenfn_tt : {0},{1},{2},{3}", lb, len1, len2, len);
+    println!("lables:  l0: {}, l1: {}, l2 :{}, l3: {}, ", l0, l1, l2, l3);
 
     // lb先dst后len
-    if (!is_cnst_dst) && (!is_cnst_len1){
+    if lb != 0 && l1 != 0 {
         log_cond(0, len as u32, lb as u64, l1 as u64, ChunkField::Length);
         let mut osl = OS.lock().unwrap();
         if let Some(ref mut os) = *osl {
             os.get_load_label(lb);
             os.get_load_label(l1);
         }
-        // println!("__chunk_trace_lenfn_tt : <{0},{1},len>", lb, l1);
     }
 
-    if len2!=0 && (!is_cnst_dst) && (!is_cnst_len2) {
+    if len2!=0 && lb != 0 && l2 != 0 {
         log_cond(0, len as u32, lb as u64, l2 as u64, ChunkField::Length);
         let mut osl = OS.lock().unwrap();
         if let Some(ref mut os) = *osl {
             os.get_load_label(lb);
             os.get_load_label(l2);
         }
-        // println!("__chunk_trace_lenfn_tt : <{0},{1},len>", lb, l2);
     }
 
 }

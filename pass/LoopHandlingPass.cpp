@@ -385,7 +385,7 @@ void LoopHandlingPass::initVariables(Module &M) {
     ChunkCmpFnTT = M.getOrInsertFunction("__chunk_trace_cmpfn_tt", ChunkCmpFnTtTy, AL);   
   }
 
-  Type *ChunkOffsFnTtArgs[3] = {Int32Ty, Int32Ty, Int8Ty};
+  Type *ChunkOffsFnTtArgs[2] = {Int32Ty, Int32Ty};
   ChunkOffsFnTtTy = FunctionType::get(VoidTy, ChunkOffsFnTtArgs, false);
   {
     AttributeList AL;
@@ -396,7 +396,7 @@ void LoopHandlingPass::initVariables(Module &M) {
     ChunkOffsFnTT = M.getOrInsertFunction("__chunk_trace_offsfn_tt", ChunkOffsFnTtTy, AL);   
   }
   
-  Type *ChunkLenFnTtArgs[6] = {Int8PtrTy, Int32Ty, Int32Ty, Int8Ty, Int8Ty, Int8Ty};
+  Type *ChunkLenFnTtArgs[4] = {Int8PtrTy, Int32Ty, Int32Ty, Int32Ty};
   ChunkLenFnTtTy = FunctionType::get(VoidTy, ChunkLenFnTtArgs, false);
   {
     AttributeList AL;
@@ -573,39 +573,28 @@ void LoopHandlingPass::visitExploitation(Instruction *Inst) {
 
   } else if(ExploitList.isIn(*Inst,OffsetFunc)) {
     // outs() << "fseek inst\n";
-    Value *index = Caller->getArgOperand(1);
-    Value *op = Caller->getArgOperand(2);
+    Value *offset = Caller->getArgOperand(1);
+    Value *whence = Caller->getArgOperand(2);
 
-    Value *is_cnst_idx =  isa<Constant>(index)? BoolTrue : BoolFalse;
-
-    CallInst *OffsFnCall = AfterBuilder.CreateCall(ChunkOffsFnTT, {index, op, is_cnst_idx});
+    CallInst *OffsFnCall = AfterBuilder.CreateCall(ChunkOffsFnTT, {offset, whence});
     
   } else if(ExploitList.isIn(*Inst, LengthFunc[0])){
+    // fread
     Value *dst = Caller->getArgOperand(0);
     Value *len1 = Caller->getArgOperand(1);
     Value *len2 = Caller->getArgOperand(2);
-
-    Value *is_cnst_dst =  isa<Constant>(dst)? BoolTrue : BoolFalse;
-    Value *is_cnst_l1 =  isa<Constant>(len1)? BoolTrue : BoolFalse;
-    Value *is_cnst_l2 =  isa<Constant>(len2)? BoolTrue : BoolFalse;
-
-    CallInst *LenFnCall = AfterBuilder.CreateCall(ChunkLenFnTT, {dst, len1, len2, is_cnst_dst, is_cnst_l1, is_cnst_l2});
-  }else if(ExploitList.isIn(*Inst, LengthFunc[1]) || ExploitList.isIn(*Inst, LengthFunc[2])){
+    CallInst *LenFnCall = AfterBuilder.CreateCall(ChunkLenFnTT, {dst, len1, len2, Caller});
+  } else if (ExploitList.isIn(*Inst, LengthFunc[1])) {
+    // memcpy, memmove, strncpy
+    Value *dst = Caller->getArgOperand(0);
     Value *len = Caller->getArgOperand(2);
-
-    Value *dst;
-    if(ExploitList.isIn(*Inst, LengthFunc[0])){
-      dst = Caller->getArgOperand(0);
-    } else dst = Caller->getArgOperand(1);
-
-    Value *is_cnst_dst =  isa<Constant>(dst)? BoolTrue : BoolFalse;
-    Value *is_cnst_l1 =  isa<Constant>(len)? BoolTrue : BoolFalse;
-    
-    CallInst *LenFnCall = AfterBuilder.CreateCall(ChunkLenFnTT, {dst, len, NumZero, is_cnst_dst, is_cnst_l1, BoolTrue});
-    
+    CallInst *LenFnCall = AfterBuilder.CreateCall(ChunkLenFnTT, {dst, len, NumZero, len});
+  } else if (ExploitList.isIn(*Inst, LengthFunc[2])){
+    // read, pread
+    Value *dst = Caller->getArgOperand(1);
+    Value *len = Caller->getArgOperand(2);
+    CallInst *LenFnCall = AfterBuilder.CreateCall(ChunkLenFnTT, {dst, len, NumZero, Caller});
   }
-
-  
 }
 
 
@@ -812,7 +801,7 @@ bool LoopHandlingPass::runOnModule(Module &M) {
     }
 
   }
-
+  return true;
 } // runOnModule end
 
 } // namespace end
