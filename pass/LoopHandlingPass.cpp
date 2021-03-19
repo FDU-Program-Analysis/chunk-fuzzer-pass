@@ -178,7 +178,7 @@ struct LoopHandlingPass : public ModulePass {
   void visitInvokeInst(Instruction *Inst);
   void visitLoadInst(Instruction *Inst);
   void visitBranchInst(Instruction *Inst, bool loop);
-  void visitSwitchInst(Module &M, Instruction *Inst, bool loop);
+  void visitSwitchInst(Module &M, Instruction *Inst);
   void visitCmpInst(Instruction *Inst, bool loop);
   void visitExploitation(Instruction *Inst);
 
@@ -363,7 +363,7 @@ void LoopHandlingPass::initVariables(Module &M) {
     ChunkCmpTT = M.getOrInsertFunction("__chunk_trace_cmp_tt", ChunkCmpTtTy, AL);   
   }
   
-  Type *ChunkSwTtArgs[5] = {Int32Ty, Int64Ty, Int32Ty, Int64PtrTy, Int8Ty};
+  Type *ChunkSwTtArgs[4] = {Int32Ty, Int64Ty, Int32Ty, Int64PtrTy};
   ChunkSwTtTy = FunctionType::get(VoidTy, ChunkSwTtArgs, false);
   {
     AttributeList AL;
@@ -496,7 +496,7 @@ void LoopHandlingPass::visitBranchInst(Instruction *Inst, bool loop) {
   }
 }
 
-void LoopHandlingPass::visitSwitchInst(Module &M, Instruction *Inst, bool loop) {
+void LoopHandlingPass::visitSwitchInst(Module &M, Instruction *Inst) {
 
   SwitchInst *Sw = dyn_cast<SwitchInst>(Inst);
   Value *Cond = Sw->getCondition();
@@ -533,19 +533,18 @@ void LoopHandlingPass::visitSwitchInst(Module &M, Instruction *Inst, bool loop) 
 
   Value *SwNum = ConstantInt::get(Int32Ty, ArgList.size());
   Value *CondExt = IRB.CreateZExt(Cond, Int64Ty);
-  Value *is_loop =  loop? BoolTrue : BoolFalse;
 
   CallInst *ProxyCall = IRB.CreateCall(
-      ChunkSwTT, {SizeArg, CondExt, SwNum, ArrPtr, is_loop});
+      ChunkSwTT, {SizeArg, CondExt, SwNum, ArrPtr});
 
 }
 
-void LoopHandlingPass::visitCmpInst(Instruction *Inst, bool is_loop) {
+void LoopHandlingPass::visitCmpInst(Instruction *Inst, bool in_loop_header) {
   Instruction *InsertPoint = Inst->getNextNode();
   if (!InsertPoint || isa<ConstantInt>(Inst))
     return;
 
-  processCmp(Inst, InsertPoint,is_loop);
+  processCmp(Inst, InsertPoint,in_loop_header);
 }
 
 // TODO
@@ -606,7 +605,7 @@ void LoopHandlingPass::processCmp(Instruction *Cond, Instruction *InsertPoint, b
   OpArg[1] = Cmp->getOperand(1);
   Value *is_cnst1 =  isa<Constant>(OpArg[0])? BoolTrue : BoolFalse;
   Value *is_cnst2 =  isa<Constant>(OpArg[1])? BoolTrue : BoolFalse;
-  Value *is_loop =  loop? BoolTrue : BoolFalse;
+  Value *in_loop_header =  loop? BoolTrue : BoolFalse;
 
   Type *OpType = OpArg[0]->getType();
   // outs() << "Compare: " << *Cmp << "\t" << OpType->getTypeID() << "\t" << OpArg[1]->getType()->getTypeID() << "\n";
@@ -642,7 +641,7 @@ void LoopHandlingPass::processCmp(Instruction *Cond, Instruction *InsertPoint, b
   OpArg[1] = castArgType(IRB, OpArg[1]);
   // outs() << "insert ChunkCmpTT\n";
   CallInst *ProxyCall =
-      IRB.CreateCall(ChunkCmpTT, {SizeArg, TypeArg, OpArg[0], OpArg[1], CondExt, is_loop, is_cnst1, is_cnst2});
+      IRB.CreateCall(ChunkCmpTT, {SizeArg, TypeArg, OpArg[0], OpArg[1], CondExt, in_loop_header, is_cnst1, is_cnst2});
 }
 
 
@@ -662,10 +661,10 @@ void LoopHandlingPass::processBoolCmp(Value *Cond, Instruction *InsertPoint, boo
 
   Value *is_cnst1 =  isa<Constant>(OpArg[0])? BoolTrue : BoolFalse;
   Value *is_cnst2 =  isa<Constant>(OpArg[1])? BoolTrue : BoolFalse;
-  Value *is_loop =  loop? BoolTrue : BoolFalse;
+  Value *in_loop_header =  loop? BoolTrue : BoolFalse;
 
   CallInst *ProxyCall =
-      IRB.CreateCall(ChunkCmpTT, {SizeArg, TypeArg, OpArg[0], OpArg[1], CondExt, is_loop, is_cnst1, is_cnst2});
+      IRB.CreateCall(ChunkCmpTT, {SizeArg, TypeArg, OpArg[0], OpArg[1], CondExt, in_loop_header, is_cnst1, is_cnst2});
   
 }
 
@@ -751,7 +750,7 @@ bool LoopHandlingPass::runOnModule(Module &M) {
         } else if (isa<BranchInst>(&Inst)) {
           visitBranchInst(&Inst, in_loop_header);
         } else if (isa<SwitchInst>(&Inst)) {
-          visitSwitchInst(M, &Inst, in_loop_header);
+          visitSwitchInst(M, &Inst);
         } else if (isa<CmpInst>(&Inst)) {
           visitCmpInst(&Inst, in_loop_header);
         }
