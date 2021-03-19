@@ -40,19 +40,26 @@ impl Logger {
         self.data.tags.contains_key(&lb)
     }
 
-    pub fn save_tag(&mut self, lb: u64) -> bool {
+    pub fn save_tag(&mut self, lb: u64, size: u32) -> u32 {
         if lb > 0 {
-            // let tag = tag_set_wrap::tag_set_find(lb as usize);
             if self.data.tags.contains_key(&lb) {
-                false
+                if let Some(ret) = self.data.tags.get(&lb) {
+                    *ret
+                } 
+                else {
+                    0
+                }
             }
             else {
-                self.data.tags.entry(lb).or_insert(true);
-                true
+                if size != 0 {
+                    //save lb
+                    self.data.tags.insert(lb,size);
+                }
+                0
             }
         }
         else {
-            false
+            0
         }
 
     }
@@ -99,8 +106,8 @@ impl Logger {
             return;
         }
 
-        self.save_tag(cond.lb1);
-        self.save_tag(cond.lb2);
+        self.save_tag(cond.lb1, cond.size);
+        self.save_tag(cond.lb2, cond.size);
 
         if !self.data.cond_list.contains(&cond) {
             self.data.cond_list.push(cond);

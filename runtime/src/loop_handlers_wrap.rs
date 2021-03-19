@@ -66,7 +66,7 @@ pub extern "C" fn __dfsw___chunk_push_new_obj(
     if is_loop && loop_cnt != 0 {
         return;
     }
-    println!("push obj :{:X}", loop_hash);
+    // println!("push obj :{:X}", loop_hash);
     let mut osl = OS.lock().unwrap();
     if let Some(ref mut os) = *osl {
         os.new_obj(is_loop, loop_hash);
@@ -109,7 +109,7 @@ pub extern "C" fn __dfsw___chunk_pop_obj(
     loop_hash: u32,
     _l0: DfsanLabel,
 ) -> bool {
-    println!("pop obj :{:X}", loop_hash);
+    // println!("pop obj :{:X}", loop_hash);
     let mut osl = OS.lock().unwrap();
     if let Some(ref mut os) = *osl {
         os.pop_obj(loop_hash);
@@ -161,12 +161,12 @@ pub extern "C" fn __chunk_trace_cmp_tt(
 
 #[no_mangle]
 pub extern "C" fn __dfsw___chunk_trace_cmp_tt(
-    size: u32,
+    _size: u32,
     op: u32,
     arg1: u64,
     arg2: u64,
     _condition: u32,
-    is_loop: u8,
+    in_loop_header: u8,
     is_cnst1: u8,
     is_cnst2: u8,
     _l0: DfsanLabel,
@@ -183,20 +183,18 @@ pub extern "C" fn __dfsw___chunk_trace_cmp_tt(
     if lb1 == 0 && lb2 == 0 {
         return;
     }
-    infer_shape(lb1, size);
-    infer_shape(lb2, size);
+    let mut size = 0;
 
-    if is_loop == 1 {
+    if in_loop_header == 1 {
+        // 传入loop_handler,计数，收集在loop_header中的label的重复使用次数，在pop时过滤只使用一次的
         // println!("Loop Length <{0} {1}>", lb1, lb2);
-        let mut osl = OS.lock().unwrap();
-        if let Some(ref mut os) = *osl {
-            infer_shape(lb1, size as u32);
-            infer_shape(lb2, size as u32);
-            os.get_load_label(lb1);
-            os.get_load_label(lb2);
-        }
-        log_cond(0, size, lb1 as u64, lb2 as u64, ChunkField::Length);
-        return;
+        // let mut osl = OS.lock().unwrap();
+        // if let Some(ref mut os) = *osl {
+        //     os.get_load_label(lb1);
+        //     os.get_load_label(lb2);
+        // }
+        // log_cond(0, size, lb1 as u64, lb2 as u64, ChunkField::Length);
+        // return;
     }
 
     let op = infer_eq_sign(op, lb1, lb2);
@@ -206,15 +204,17 @@ pub extern "C" fn __dfsw___chunk_trace_cmp_tt(
             if arg2 == 0 {
                 return;
             }
+            let mut osl = OS.lock().unwrap();
+            if let Some(ref mut os) = *osl {
+                os.get_load_label(lb1);
+                // println!("lb : {}, {:?}",lb1, tag_set_find(lb1.try_into().unwrap()));
+                size = loop_handlers::ObjectStack::access_check(lb1 as u64, 0);
+            }
+
             let vec8 = arg2.to_le_bytes().to_vec();
             let slice_vec8 = &vec8[..size as usize];
             let vec8 = slice_vec8.to_vec();
             
-            let mut osl = OS.lock().unwrap();
-            if let Some(ref mut os) = *osl {
-                infer_shape(lb1, size as u32);
-                os.get_load_label(lb1);
-            }
             log_enum(size, lb1 as u64, vec8);
             return;
         }
@@ -222,14 +222,16 @@ pub extern "C" fn __dfsw___chunk_trace_cmp_tt(
             if arg1 == 0 {
                 return;
             }
+            let mut osl = OS.lock().unwrap();
+            if let Some(ref mut os) = *osl {
+                os.get_load_label(lb2);
+                // println!("lb: {}, {:?}", lb2, tag_set_find(lb2.try_into().unwrap()));
+                size = loop_handlers::ObjectStack::access_check(lb2 as u64, 0);
+            }
             let vec8 = arg1.to_le_bytes().to_vec();
             let slice_vec8 = &vec8[..size as usize];
-            let vec8 = slice_vec8.to_vec();let mut osl = OS.lock().unwrap();
-            if let Some(ref mut os) = *osl {
-                infer_shape(lb2, size as u32);
-                os.get_load_label(lb2);
-            }
-
+            let vec8 = slice_vec8.to_vec();
+            
             log_enum(size, lb2 as u64, vec8);
             return;
         }
@@ -250,8 +252,6 @@ pub extern "C" fn __dfsw___chunk_trace_cmp_tt(
             if size2 > 3*size1 {
                 // let mut osl = OS.lock().unwrap();
                 // if let Some(ref mut os) = *osl {
-                //     infer_shape(lb1, size as u32);
-                //     infer_shape(lb2, size as u32);
                 //     os.get_load_label(lb1);
                 //     os.get_load_label(lb2);
                 // }
@@ -260,8 +260,6 @@ pub extern "C" fn __dfsw___chunk_trace_cmp_tt(
             } else if size1 > 3*size2 {
                 // let mut osl = OS.lock().unwrap();
                 // if let Some(ref mut os) = *osl {
-                //     infer_shape(lb1, size as u32);
-                //     infer_shape(lb2, size as u32);
                 //     os.get_load_label(lb1);
                 //     os.get_load_label(lb2);
                 // }
@@ -274,8 +272,6 @@ pub extern "C" fn __dfsw___chunk_trace_cmp_tt(
     if lb1 != 0 && lb2 != 0 {
         let mut osl = OS.lock().unwrap();
         if let Some(ref mut os) = *osl {
-            infer_shape(lb1, size as u32);
-            infer_shape(lb2, size as u32);
             os.get_load_label(lb1);
             os.get_load_label(lb2);
         }
@@ -297,7 +293,7 @@ pub extern "C" fn __chunk_trace_switch_tt(
 
 #[no_mangle]
 pub extern "C" fn __dfsw___chunk_trace_switch_tt(
-    size: u32,
+    _size: u32,
     _condition: u64,
     num: u32,
     args: *mut u64,
@@ -312,7 +308,7 @@ pub extern "C" fn __dfsw___chunk_trace_switch_tt(
     if lb == 0 {
         return;
     }
-    infer_shape(lb, size);
+    let mut size = 0;
 
     // let mut op = defs::COND_ICMP_EQ_OP;
     let sw_args = unsafe { slice::from_raw_parts(args, num as usize) }.to_vec();
@@ -320,6 +316,8 @@ pub extern "C" fn __dfsw___chunk_trace_switch_tt(
     let mut osl = OS.lock().unwrap();
     if let Some(ref mut os) = *osl {
         os.get_load_label(lb);
+        // println!("lb: {}, {:?}",lb,  tag_set_find(lb.try_into().unwrap()));
+        size = loop_handlers::ObjectStack::access_check(lb as u64, 0);
     }
     for arg in sw_args {
         let vec8 = arg.to_le_bytes().to_vec();
@@ -452,12 +450,12 @@ pub extern "C" fn __dfsw___chunk_trace_lenfn_tt(
     let len = ret as usize;
 
     let lb = unsafe { dfsan_read_label(dst,len) };
-    println!("lenfn_tt : {0},{1},{2},{3}", lb, len1, len2, len);
-    println!("lables:  l0: {}, l1: {}, l2 :{}, l3: {}, ", l0, l1, l2, l3);
+    // println!("lenfn_tt : {0},{1},{2},{3}", lb, len1, len2, len);
+    // println!("lables:  l0: {}, l1: {}, l2 :{}, l3: {}, ", l0, l1, l2, l3);
 
     // lb先dst后len
     if lb != 0 && l1 != 0 {
-        log_cond(0, len as u32, lb as u64, l1 as u64, ChunkField::Length);
+        log_cond(0, len as u32, l1 as u64, lb as u64, ChunkField::Length);
         let mut osl = OS.lock().unwrap();
         if let Some(ref mut os) = *osl {
             os.get_load_label(lb);
@@ -466,7 +464,7 @@ pub extern "C" fn __dfsw___chunk_trace_lenfn_tt(
     }
 
     if len2!=0 && lb != 0 && l2 != 0 {
-        log_cond(0, len as u32, lb as u64, l2 as u64, ChunkField::Length);
+        log_cond(0, len as u32, l2 as u64, lb as u64, ChunkField::Length);
         let mut osl = OS.lock().unwrap();
         if let Some(ref mut os) = *osl {
             os.get_load_label(lb);
@@ -518,15 +516,12 @@ fn log_enum(
     lb: u64,
     enums: Vec<u8>
 ) {
-    // 在hashmap里查找lb，把magic_byte插入到candidates里
-    if enums.len() != size as usize{
-        // println!("size error");
+    if enums.len() != size as usize || size == 0 {
         return;
     }
     let mut lcl = LC.lock().expect("Could not lock LC.");
     if let Some(ref mut lc) = *lcl {
         lc.save_enums(lb, enums);
     }
-    // log_cond(hash, size, lb, 0, ChunkField::Enum);
 }
 
