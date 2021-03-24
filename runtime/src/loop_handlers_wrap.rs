@@ -298,12 +298,10 @@ pub extern "C" fn __dfsw___chunk_trace_switch_tt(
     _condition: u64,
     num: u32,
     args: *mut u64,
-    _is_loop: u8,
     _l0: DfsanLabel,
     l1: DfsanLabel,
     _l2: DfsanLabel,
     _l3: DfsanLabel,
-    _l4: DfsanLabel,
 ) {
     let lb = l1;
     if lb == 0 {
@@ -313,7 +311,6 @@ pub extern "C" fn __dfsw___chunk_trace_switch_tt(
 
     // let mut op = defs::COND_ICMP_EQ_OP;
     let sw_args = unsafe { slice::from_raw_parts(args, num as usize) }.to_vec();
-
     let mut osl = OS.lock().unwrap();
     if let Some(ref mut os) = *osl {
         os.get_load_label(lb);
