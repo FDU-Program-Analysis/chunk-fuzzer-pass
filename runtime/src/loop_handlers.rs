@@ -1,14 +1,15 @@
 use super::*;
-use angora_common::{tag::*};
+use angora_common::{tag::*, cond_stmt_base::*};
 // use itertools::Itertools;
 use lazy_static::lazy_static;
 use crate::{tag_set_wrap};
 use std::{fs::File, io::prelude::*, cmp::*, sync::Mutex, time::*};
+use std::collections::HashMap;
 
 const STACK_MAX: usize = 100000;
 
 lazy_static! {
-    static ref LC: Mutex<Option<Logger>> = Mutex::new(Some(Logger::new()));
+    pub static ref LC: Mutex<Option<Logger>> = Mutex::new(Some(Logger::new()));
 }
 
 // Loop & Function labels. 
@@ -17,9 +18,9 @@ pub struct ObjectLabels {
     is_loop: bool,
     hash: u32,
     cur_iter: Option<Vec<TaintSeg>>,
-    // cur_iter_num: usize, 
+    cur_iter_num: u32, 
     sum: Vec<TaintSeg>,
-    length_candidates: Vec<u32>,
+    length_candidates: HashMap<u32, u32>,
 }
 
 
@@ -37,9 +38,9 @@ impl ObjectLabels {
             is_loop,
             hash,
             cur_iter,
-            // cur_iter_num: 0,
+            cur_iter_num: 0,
             sum: vec![],
-            length_candidates: vec![],
+            length_candidates: HashMap::new(),
         }
     }
 }
@@ -224,60 +225,57 @@ impl ObjectStack {
         });
         // println!("vec to minimize: {:?}", list);
         let mut new_list = vec![];
-        let none_TS = TaintSeg{
+        let none_ts = TaintSeg{
             lb: 0,
             begin: 0,
             end: 0,
             son: Some(vec![]),
         };
-        let mut cur_TS = none_TS.clone();
+        let mut cur_ts = none_ts.clone();
         for i in 0 .. list.len() {
-            if cur_TS == none_TS {
-                cur_TS = list[i].clone();
+            if cur_ts == none_ts {
+                cur_ts = list[i].clone();
             }
             else {
-                match loop_handlers::ObjectStack::seg_relation(&cur_TS, &list[i]) {
+                match loop_handlers::ObjectStack::seg_relation(&cur_ts, &list[i]) {
                     SegRelation::Same => {
-                        cur_TS.lb = min(cur_TS.lb, list[i].lb);
+                        cur_ts.lb = min(cur_ts.lb, list[i].lb);
                         if ! list[i].son.is_none() {
                             let tmp = list[i].clone().son.unwrap();
                             for son_i in tmp {
-                                loop_handlers::ObjectStack::insert_node(&mut cur_TS, son_i);
+                                loop_handlers::ObjectStack::insert_node(&mut cur_ts, son_i);
                             }
                         }
                     },
                     SegRelation::Father => {
-                        // println!("Father: cur_TS:{:?}, list[i]:{:?}", cur_TS, list[i]);
-                        loop_handlers::ObjectStack::insert_node(&mut cur_TS, list[i].clone())
+                        loop_handlers::ObjectStack::insert_node(&mut cur_ts, list[i].clone())
                     },
                     SegRelation::Son => {
-                        // println!("Son: cur_TS:{:?}, list[i]:{:?}", cur_TS, list[i]);
-                        let prev_TS = cur_TS;
-                        cur_TS = list[i].clone();
-                        loop_handlers::ObjectStack::insert_node(&mut cur_TS, prev_TS);
+                        let prev_ts = cur_ts;
+                        cur_ts = list[i].clone();
+                        loop_handlers::ObjectStack::insert_node(&mut cur_ts, prev_ts);
                     },
                     SegRelation::RightConnect => {
-                        // println!("RightConnect: cur_TS:{:?}, list[i]:{:?}", cur_TS, list[i]);
-                        if loop_handlers::ObjectStack::access_check(cur_TS.lb as u64, 0) != 0 {
-                            let prev_TS = cur_TS.clone();
-                            cur_TS = none_TS.clone();
-                            cur_TS.begin = prev_TS.begin;
-                            cur_TS.end = list[i].end;
-                            if let Some(ref mut son) = cur_TS.son {
-                                son.push(prev_TS);
+                        if loop_handlers::ObjectStack::access_check(cur_ts.lb as u64, 0) != 0 {
+                            let prev_ts = cur_ts.clone();
+                            cur_ts = none_ts.clone();
+                            cur_ts.begin = prev_ts.begin;
+                            cur_ts.end = list[i].end;
+                            if let Some(ref mut son) = cur_ts.son {
+                                son.push(prev_ts);
                                 son.push(list[i].clone());
                             }
                             else {
-                                cur_TS.son = Some(vec![prev_TS, list[i].clone()]);
+                                cur_ts.son = Some(vec![prev_ts, list[i].clone()]);
                             }
-                            cur_TS.lb = hash_combine(cur_TS.son.as_ref().unwrap())
-                            //cur_TS 和 list[i]为同一层，同为son
+                            cur_ts.lb = hash_combine(cur_ts.son.as_ref().unwrap())
+                            //cur_ts 和 list[i]为同一层，同为son
                         }
                         else {
-                            cur_TS.end = list[i].end;
-                            if let Some(ref mut son) = cur_TS.son {
+                            cur_ts.end = list[i].end;
+                            if let Some(ref mut son) = cur_ts.son {
                                 son.push(list[i].clone());
-                                cur_TS.lb = hash_combine(&son);
+                                cur_ts.lb = hash_combine(&son);
                             }                            
                         }
                     },
@@ -285,18 +283,16 @@ impl ObjectStack {
                         //overlap的部分切开分为两个
                     },
                     SegRelation::Disjoint => {
-                        // println!("Disjoint: cur_TS:{:?}, list[i]:{:?}", cur_TS, list[i]);
-                        new_list.push(cur_TS);
-                        cur_TS = list[i].clone();
+                        new_list.push(cur_ts);
+                        cur_ts = list[i].clone();
                     },
                     _ => {},
                 }
             }
         }
-        if cur_TS != none_TS {
-            new_list.push(cur_TS);
+        if cur_ts != none_ts {
+            new_list.push(cur_ts);
         }
-        // println!("new_list:{:?}\n", new_list);
         list.clear();
         list.append(&mut new_list);
     }
@@ -312,6 +308,13 @@ impl ObjectStack {
         else {
             0
         }
+    }
+
+    pub fn maybe_length(
+        &mut self,
+        lb: u32,
+    ) {
+        *self.objs[self.cur_id].length_candidates.entry(lb).or_insert(0)+=1;
     }
 
     pub fn get_load_label(
@@ -400,16 +403,15 @@ impl ObjectStack {
     // sum <= sum + cur_iter, cur_iter.clear()
     pub fn dump_cur_iter(
         &mut self,
-        _loop_cnt: u32,
+        loop_cnt: u32,
     ) {
         if self.objs[self.cur_id].is_loop {
             if self.objs[self.cur_id].cur_iter.is_some() {
                 let mut tmp_iter = self.objs[self.cur_id].cur_iter.as_mut().unwrap();
-                // println!("iter");
                 loop_handlers::ObjectStack::construct_tree(&mut tmp_iter);
-                // self.objs[self.cur_id].cur_iter_num = loop_cnt as usize;
                 self.insert_iter_into_sum();
                 self.objs[self.cur_id].cur_iter.as_mut().unwrap().clear();
+                self.objs[self.cur_id].cur_iter_num = loop_cnt;
 
                 // if self.objs[self.cur_id].sum.len() > 0{
                 //     println!("dump_cur_iter: {:?}",self.objs[self.cur_id].sum);
@@ -445,10 +447,26 @@ impl ObjectStack {
             }
             else {
                 let mut list = top_obj.sum;
-                self.cur_id -= 1;
-                // let index = self.objs[self.cur_id].cur_iter_num;
-                // println!("pop");
                 loop_handlers::ObjectStack::construct_tree(&mut list);
+                for (key,value) in &top_obj.length_candidates {
+                    let size = loop_handlers::ObjectStack::access_check(*key as u64, 0);
+                    
+                    if size != 0 && *value == top_obj.cur_iter_num {
+                        // println!("loop_hash:{}, iter_num:{}, key: {}, value:{}, size: {}", hash, top_obj.cur_iter_num ,*key, *value, size);
+                        let cond = CondStmtBase {
+                            op: 0,
+                            size,
+                            lb1: *key as u64,
+                            lb2: 0,
+                            field: ChunkField::Length,
+                        };
+                        let mut lcl = LC.lock().expect("Could not lock LC.");
+                        if let Some(ref mut lc) = *lcl {
+                            lc.save(cond);
+                        }
+                    }
+                }
+                self.cur_id -= 1;
                 self.insert_labels(&mut list);
             }
         } else {

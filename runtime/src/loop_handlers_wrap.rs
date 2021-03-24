@@ -1,5 +1,5 @@
 use super::*;
-use crate::{loop_handlers::ObjectStack, tag_set_wrap::*};
+use crate::{loop_handlers::*, tag_set_wrap::*};
 use angora_common::{cond_stmt_base::*, defs};
 use lazy_static::lazy_static;
 use std::{slice, sync::Mutex, ffi::CStr};
@@ -10,8 +10,6 @@ use std::convert::TryInto;
 // So, we should call drop manually.. see ***_fini.
 lazy_static! {
     static ref OS: Mutex<Option<ObjectStack>> = Mutex::new(Some(ObjectStack::new()));
-    static ref LC: Mutex<Option<Logger>> = Mutex::new(Some(Logger::new()));
-    static ref TS: Mutex<Option<TagSet>> = Mutex::new(Some(TagSet::new()));
 }
 
 #[no_mangle]
@@ -186,15 +184,18 @@ pub extern "C" fn __dfsw___chunk_trace_cmp_tt(
     let mut size = 0;
 
     if in_loop_header == 1 {
+
         // 传入loop_handler,计数，收集在loop_header中的label的重复使用次数，在pop时过滤只使用一次的
         // println!("Loop Length <{0} {1}>", lb1, lb2);
-        // let mut osl = OS.lock().unwrap();
-        // if let Some(ref mut os) = *osl {
-        //     os.get_load_label(lb1);
-        //     os.get_load_label(lb2);
-        // }
-        // log_cond(0, size, lb1 as u64, lb2 as u64, ChunkField::Length);
-        // return;
+        let mut osl = OS.lock().unwrap();
+        if let Some(ref mut os) = *osl {
+            if lb1 != 0 {
+                os.maybe_length(lb1);
+            }
+            if lb2 != 0 {
+                os.maybe_length(lb2);
+            }
+        }
     }
 
     let op = infer_eq_sign(op, lb1, lb2);
@@ -316,7 +317,6 @@ pub extern "C" fn __dfsw___chunk_trace_switch_tt(
     let mut osl = OS.lock().unwrap();
     if let Some(ref mut os) = *osl {
         os.get_load_label(lb);
-        // println!("lb: {}, {:?}",lb,  tag_set_find(lb.try_into().unwrap()));
         size = loop_handlers::ObjectStack::access_check(lb as u64, 0);
     }
     for arg in sw_args {
@@ -435,13 +435,13 @@ pub extern "C" fn __chunk_trace_lenfn_tt(
 #[no_mangle]
 pub extern "C" fn __dfsw___chunk_trace_lenfn_tt(
     dst: *mut i8,
-    len1: u32,
+    _len1: u32,
     len2: u32,
     ret: u32,
-    l0: DfsanLabel,
+    _l0: DfsanLabel,
     l1: DfsanLabel,
     l2: DfsanLabel,
-    l3: DfsanLabel,
+    _l3: DfsanLabel,
 ) {
     if l1 == 0 && l2 == 0 {
         return;
@@ -490,7 +490,6 @@ fn infer_shape(lb: u32, size: u32) {
     }
 }
 
-#[inline]
 fn log_cond(
     op: u32,
     size: u32,
