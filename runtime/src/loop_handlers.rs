@@ -166,6 +166,14 @@ impl ObjectStack {
                             son.append(&mut tmp[0].son.clone().unwrap());
                         }
                         return;
+                    },
+                    SegRelation::RightOverlap => {
+                        if loop_handlers::ObjectStack::access_check(son[i].lb as u64, 0) == 0 {
+                            son[i].end = node.end;
+                            loop_handlers::ObjectStack::insert_node(&mut son[i], node.clone());
+                            son[i].lb = hash_combine(son[i].son.as_ref().unwrap());
+                        }
+                        return;
                     }
                     _ => {},
                 } 
@@ -268,10 +276,11 @@ impl ObjectStack {
                             else {
                                 cur_ts.son = Some(vec![prev_ts, list[i].clone()]);
                             }
-                            cur_ts.lb = hash_combine(cur_ts.son.as_ref().unwrap())
+                            cur_ts.lb = hash_combine(cur_ts.son.as_ref().unwrap());
                             //cur_ts 和 list[i]为同一层，同为son
                         }
                         else {
+                            //合并得到的lb
                             cur_ts.end = list[i].end;
                             if let Some(ref mut son) = cur_ts.son {
                                 son.push(list[i].clone());
@@ -280,7 +289,28 @@ impl ObjectStack {
                         }
                     },
                     SegRelation::RightOverlap => {
+                        if cur_ts.son.is_none() && list[i].son.is_none() {
+                            println!("two none");
+                            //拆开两个
+                        }
+                        if loop_handlers::ObjectStack::access_check(cur_ts.lb as u64, 0) == 0 {
+                            // lb comes from hash_combine
+                            cur_ts.end = list[i].end;
+                            loop_handlers::ObjectStack::insert_node(&mut cur_ts, list[i].clone());
+                            cur_ts.lb = hash_combine(cur_ts.son.as_ref().unwrap());
+                        }
+                        else if loop_handlers::ObjectStack::access_check(list[i].lb as u64, 0) == 0 {
+                            let prev_ts = cur_ts.clone();
+                            cur_ts = list[i].clone();
+                            cur_ts.begin = prev_ts.begin;
+                            loop_handlers::ObjectStack::insert_node(&mut cur_ts, prev_ts);
+                            cur_ts.lb = hash_combine(cur_ts.son.as_ref().unwrap());
+                        }
+                        else {
+                        }
                         //overlap的部分切开分为两个
+                        //怎么处理呢，必须处理，否则缺东西
+                        
                     },
                     SegRelation::Disjoint => {
                         new_list.push(cur_ts);
