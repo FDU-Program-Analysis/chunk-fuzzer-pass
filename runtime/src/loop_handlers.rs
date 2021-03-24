@@ -5,6 +5,7 @@ use lazy_static::lazy_static;
 use crate::{tag_set_wrap};
 use std::{fs::File, io::prelude::*, cmp::*, sync::Mutex, time::*};
 use std::collections::HashMap;
+use rand::Rng;
 
 const STACK_MAX: usize = 100000;
 
@@ -535,13 +536,36 @@ impl ObjectStack {
         s.push_str(&format!("{}\"{}\": {},\n",blank2, end, ttsg.end));     //    "end": 8,
         let ttsg_sons = ttsg.son.as_ref().unwrap();
         s.push_str(&format!("{}\"{}\": {{\n",blank2, str_son)); 
+        let mut has_last = true;
+        let mut fake_last_seg = TaintSeg{
+            lb: 0,
+            begin: 0,
+            end: 0,
+            son: None,
+        };
+        if ttsg.end != ttsg_sons[ttsg_sons.len() - 1].end {
+            has_last = false;
+            let mut rng = rand::thread_rng();
+            let lb = rng.gen_range(0..0x10000000)+0x10000000;
+            fake_last_seg.lb = lb;
+            fake_last_seg.begin = ttsg_sons[ttsg_sons.len() - 1].end;
+            fake_last_seg.end = ttsg.end;
+        }
         for i in 0 .. ttsg_sons.len() {
         // for (&i_sum, &i_son) in &label.sum.iter().zip(&label.son.iter()) {
             if i == ttsg_sons.len() - 1 {
-                loop_handlers::ObjectStack::output_format(s, &ttsg_sons[i], depth+1, true);
+                if has_last {
+                    loop_handlers::ObjectStack::output_format(s, &ttsg_sons[i], depth+1, true);
+                }
+                else {
+                    loop_handlers::ObjectStack::output_format(s, &ttsg_sons[i], depth+1, false);
+                    loop_handlers::ObjectStack::output_format(s, &fake_last_seg, depth+1, true);
+                }
             }
             else {
                 loop_handlers::ObjectStack::output_format(s, &ttsg_sons[i], depth+1, false);
+                
+                
             }
             // s.push_str(&format!("{}}},\n",blank));
         }

@@ -16,3 +16,4 @@ libc = "0.2"
 lazy_static = "1.1"
 angora_common = { path = "../common" }
 # itertools = "0.10.0"
+rand = "0.8.3"
