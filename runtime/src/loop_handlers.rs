@@ -328,6 +328,8 @@ impl ObjectStack {
         list.append(&mut new_list);
     }
 
+    // if size == 0 ,search lb in LC, return 0 if not found
+    // if size != 0, save lb in LC, always return 0
     pub fn access_check(
         lb: u64,
         size: u32,
@@ -479,6 +481,7 @@ impl ObjectStack {
             else {
                 let mut list = top_obj.sum;
                 loop_handlers::ObjectStack::construct_tree(&mut list);
+                if list.len() == 1 {
                 for (key,value) in &top_obj.length_candidates {
                     let size = loop_handlers::ObjectStack::access_check(*key as u64, 0);
                     
@@ -488,7 +491,7 @@ impl ObjectStack {
                             op: 0,
                             size,
                             lb1: *key as u64,
-                            lb2: 0,
+                            lb2: list[0].lb,
                             field: ChunkField::Length,
                         };
                         let mut lcl = LC.lock().expect("Could not lock LC.");
@@ -496,6 +499,7 @@ impl ObjectStack {
                             lc.save(cond);
                         }
                     }
+                }
                 }
                 self.cur_id -= 1;
                 self.insert_labels(&mut list);
