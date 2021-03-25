@@ -33,7 +33,7 @@ pub extern "C" fn __dfsw___chunk_get_load_label(
     size: usize,
     _l0: DfsanLabel,
     _l1: DfsanLabel,
-) {
+) -> u32 {
     let mut osl = OS.lock().unwrap();
     if let Some(ref mut os) = *osl {
         let arglen = if size == 0 {
@@ -43,11 +43,13 @@ pub extern "C" fn __dfsw___chunk_get_load_label(
         };
         let lb = unsafe { dfsan_read_label(addr, arglen) };
         if lb <= 0 {
-            return;
+            return 0;
         }
         infer_shape(lb, arglen as u32);
         os.get_load_label(lb);
+        return lb;
     }
+    return 0;
 }
 
 #[no_mangle]
@@ -423,6 +425,7 @@ pub extern "C" fn __dfsw___chunk_trace_offsfn_tt(
     }
 }
 
+#[no_mangle]
 pub extern "C" fn __chunk_trace_lenfn_tt(
     _a: u32,
     _b: u32,
@@ -474,6 +477,48 @@ pub extern "C" fn __dfsw___chunk_trace_lenfn_tt(
     }
 
 }
+
+/*
+#[no_mangle]
+pub extern "C" fn __chunk_trace_gep_tt(
+    _a: *const i8,
+    _b: usize,
+    _c: u32,
+) {
+    panic!("Forbid calling __chunk_trace_gep_tt directly");
+}
+
+#[no_mangle]
+pub extern "C" fn __dfsw___chunk_trace_gep_tt(
+    addr: *const i8, 
+    size: usize,
+    load_lb: u32,
+    _l0: DfsanLabel,
+    _l1: DfsanLabel,
+    _l2: DfsanLabel,
+) {
+    if loop_handlers::ObjectStack::access_check(load_lb as u64, 0) == 0 {
+        return;
+    }
+    let mut osl = OS.lock().unwrap();
+    if let Some(ref mut os) = *osl {
+        let arglen = if size == 0 {
+            unsafe { libc::strlen(addr) as usize }
+        } else {
+            size
+        };
+        let lb = unsafe { dfsan_read_label(addr, arglen) };
+        if lb <= 0 {
+            return;
+        }
+        infer_shape(lb, arglen as u32);
+        os.get_load_label(lb);
+        println!("offset: offset-lb:{}, paylaod-lb:{}", lb, load_lb);
+        log_cond(1, size as u32, lb as u64, load_lb as u64, ChunkField::Offset)
+    }
+    
+}
+*/
 
 fn infer_eq_sign(op: u32, lb1: u32, lb2: u32) -> u32 {
     if op == defs::COND_ICMP_EQ_OP
