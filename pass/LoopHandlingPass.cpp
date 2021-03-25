@@ -157,6 +157,7 @@ struct LoopHandlingPass : public ModulePass {
   FunctionCallee ChunkCmpFnTT;
   FunctionCallee ChunkLenFnTT;
   FunctionCallee ChunkOffsFnTT;
+  // FunctionCallee ChunkGepTT;
 
 
   LoopHandlingPass() : ModulePass(ID) {}
@@ -406,6 +407,20 @@ void LoopHandlingPass::initVariables(Module &M) {
                          Attribute::OptimizeNone);
     ChunkLenFnTT = M.getOrInsertFunction("__chunk_trace_lenfn_tt", ChunkLenFnTtTy, AL);   
   }
+
+  /*
+  Type *ChunkGepArgs[3] = {Int8PtrTy, Int32Ty, Int32Ty};
+  FunctionType *ChunkGepArgsTy = FunctionType::get(VoidTy, ChunkGepArgs, false);
+  {
+    AttributeList AL;
+    AL = AL.addAttribute(CTX, AttributeList::FunctionIndex,
+                         Attribute::NoInline);
+    AL = AL.addAttribute(CTX, AttributeList::FunctionIndex,
+                         Attribute::OptimizeNone);
+    ChunkGepTT = M.getOrInsertFunction("__chunk_trace_gep_tt", ChunkGepArgsTy, AL);   
+  }
+  */
+  
 
   std::vector<std::string> AllExploitListFiles;
   AllExploitListFiles.insert(AllExploitListFiles.end(),
@@ -695,7 +710,7 @@ void LoopHandlingPass::processCallInst(Instruction *Inst) {
 void LoopHandlingPass::processLoadInst(Instruction *Inst, Instruction *InsertPoint) {
   LoadInst *LoadI = dyn_cast<LoadInst>(Inst);
   Value *LoadOpr = LoadI->getPointerOperand();
-  StringRef VarName = LoadOpr->getName();
+  // StringRef VarName = LoadOpr->getName();
   Type* VarType = LoadI->getPointerOperandType()->getPointerElementType();
   unsigned TySize = 0;
   if (VarType->isIntegerTy())
@@ -708,6 +723,22 @@ void LoopHandlingPass::processLoadInst(Instruction *Inst, Instruction *InsertPoi
     Value * LoadOprPtr = IRB.CreatePointerCast(
                   LoadOpr, Int8PtrTy, "loadOprPtr");
     CallInst *CallI = IRB.CreateCall(LoadLabelDumpFn, {LoadOprPtr, size});
+    /*
+    if (GetElementPtrInst *Gep = dyn_cast<GetElementPtrInst>(LoadOpr) ) {
+      Value *GepOpr = Gep->getPointerOperand();
+      Type* GepVarType = Gep->getPointerOperandType()->getPointerElementType();
+      unsigned GepTySize = 0;
+      if (GepVarType->isIntegerTy())
+        GepTySize = GepVarType->getIntegerBitWidth();
+      GepTySize = GepTySize / 8; //byte;
+      ConstantInt *Gepsize = ConstantInt::get(Int32Ty, GepTySize);
+      if (GepTySize != 0) {
+        Value * GepOprPtr = IRB.CreatePointerCast(
+                      GepOpr, Int8PtrTy, "GepOprPtr");
+        CallInst *CallI2 = IRB.CreateCall(ChunkGepTT, {GepOprPtr, Gepsize, CallI});
+      }
+    }
+    */
   }
   /*
   else {
