@@ -1,6 +1,10 @@
 // use bincode::{deserialize_from, serialize_into};
 // use std::{collections::HashMap, env, fs::File, io::prelude::*, path::Path};
-use std::{fs::File, io::prelude::*};
+use std::{
+    fs::File, 
+    io::prelude::*,
+    path::PathBuf,
+};
 
 // use crate::{len_label, tag_set_wrap};
 // use angora_common::{cond_stmt_base::*, config, defs, log_data::LogData};
@@ -9,33 +13,19 @@ use angora_common::{cond_stmt_base::*, log_data::LogData};
 #[derive(Debug)]
 pub struct Logger {
     data: LogData,
-    // fd: Option<fs::File>,
+    fd: Option<File>,
     // order_map: HashMap<(u32, u32), u32>,
 }
 
 impl Logger {
     pub fn new() -> Self {
-        // export ANGORA_TRACK_OUTPUT=track.log
-        // let fd = match env::var(defs::TRACK_OUTPUT_VAR) {
-        //     Ok(path) => match fs::File::create(&path) {
-        //         Ok(f) => Some(f),
-        //         Err(_) => None,
-        //     },
-        //     Err(_) => None,
-        // };
-
         Self {
             data: LogData::new(),
-            // fd,
+            fd: None,
             // order_map: HashMap::new(),
         }
     }
 
-    // pub fn set_file_name(&mut self, json_name: String) {
-    //     let mut log_name = &json_name;
-    //     log_name.replace("json", "log");
-    //     self.file_name = log_name.to_string();
-    // }
     pub fn find_tag_lb(&self, lb: u64) -> bool {
         self.data.tags.contains_key(&lb)
     }
@@ -143,6 +133,22 @@ impl Logger {
         let enum_clone = self.data.enums.clone();
         self.data.cond_list.retain(|&item| enum_clone.contains_key(&item.lb1) == false);
     }
+    pub fn set_input_file_name(
+        &mut self,
+        track_name: PathBuf,
+    ){
+        if self.fd.is_some() {
+            return;
+        }
+        // println!("track_name: {:?}", track_name);
+        let track_file = match File::create(track_name) {
+            Ok(a) => a,
+            Err(e) => {
+                panic!("FATAL: Could not create track file: {:?}", e);
+            }
+        };
+        self.fd = Some(track_file);
+    }
 
     pub fn output_logs(&self, s: &mut String) {
         // output：(lb1，lb2, field, remarks)
@@ -150,10 +156,6 @@ impl Logger {
         for (key,value) in &self.data.enums {
             s.push_str(&format!("({:016X};{:016X};Enum;{};{{",key,0,value.len()));
             for vi in value {
-                // let enumi = match String::from_utf8(vi.to_vec()) {
-                //     Ok(v) => v,
-                //     Err(e) => panic!("invalid utf-8 sequence: {}",e),
-                // };
                 s.push_str(&format!("{:02X?};",vi));
             }
             s.push_str(&format!("}})\n"));
@@ -168,15 +170,11 @@ impl Logger {
     fn fini(&mut self) {
 
         self.enums_clean();
-        
-        // if let Some(fd) = &self.fd {
-        let mut fd = File::create("track.log").expect("Unable to create log file");
-        let mut s = String::new();
-        self.output_logs(&mut s); 
-        fd.write_all(s.as_bytes()).expect("Unable to write file");
-            // let mut writer = io::BufWriter::new(fd);
-            // serialize_into(&mut writer, &self.data).expect("Could not serialize data.");
-        // }
+        if self.fd.is_some() {
+            let mut s = String::new();
+            self.output_logs(&mut s); 
+            self.fd.as_ref().unwrap().write_all(s.as_bytes()).expect("Unable to write file");
+        }
     }
 }
 

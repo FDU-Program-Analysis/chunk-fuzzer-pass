@@ -2,7 +2,14 @@ use super::*;
 use crate::{loop_handlers::*, tag_set_wrap::*};
 use angora_common::{cond_stmt_base::*, defs};
 use lazy_static::lazy_static;
-use std::{slice, sync::Mutex, ffi::CStr};
+use std::{
+    slice, 
+    sync::Mutex, 
+    // ffi::CStr,
+    env,
+    path::PathBuf,
+    ffi::OsStr,
+};
 use libc::c_char;
 use std::convert::TryInto;
 
@@ -127,20 +134,36 @@ pub extern "C" fn __chunk_object_stack_fini() {
 }
 
 #[no_mangle]
-pub extern "C" fn __chunk_set_input_file_name(name: *const c_char){
+pub extern "C" fn __chunk_set_input_file_name(){
+    let input_file = match env::var("CHUNK_CURRENT_INPUT_FILE") {
+        Ok(path) => {
+            // println!("CHUNK_CURRENT_INPUT_FILE: {:?}",path);
+            PathBuf::from(path)
+        },
+        Err(_) => panic!("set input_name error"),
+    };
+    let file_name = match input_file.file_name() {
+        Some(tmp) => tmp.to_str().unwrap(),
+        None => panic!("cannot get input file name"),
+    };
     let mut osl = OS.lock().unwrap();
     if let Some(ref mut os) = *osl {
-        let c_str = unsafe { CStr::from_ptr(name)};
-        let str_: &str = c_str.to_str().unwrap();
-        let v: Vec<&str> = str_.split('/').collect();
-        let str_buf: &mut String = &mut String::new();
-        for i in v {
-            str_buf.push_str(i);
-            str_buf.push_str("_");
-        }
-        str_buf.push_str(".json");
-        os.set_input_file_name(str_buf);
+        let mut json_file = input_file.clone();
+        let json_name = &format!("{}{}", file_name, ".json");
+        let json_name_os : &OsStr = OsStr::new(json_name);
+        json_file.set_file_name(json_name_os);
+        // println!("json: {:?}", json_file);
+        os.set_input_file_name(json_file);
     } 
+    let mut lcl = LC.lock().expect("Could not lock LC.");
+    if let Some(ref mut lc) = *lcl {
+        let mut track_file = input_file.clone();
+        let track_name = &format!("{}{}", file_name, ".track");
+        let track_name_os : &OsStr = OsStr::new(track_name);
+        track_file.set_file_name(track_name_os);
+        // println!("track: {:?}", track_file);
+        lc.set_input_file_name(track_file);
+    }
 }
 
 #[no_mangle]

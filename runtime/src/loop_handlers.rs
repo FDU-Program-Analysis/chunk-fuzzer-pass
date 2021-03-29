@@ -3,7 +3,14 @@ use angora_common::{tag::*, cond_stmt_base::*};
 // use itertools::Itertools;
 use lazy_static::lazy_static;
 use crate::{tag_set_wrap};
-use std::{fs::File, io::prelude::*, cmp::*, sync::Mutex, time::*};
+use std::{
+    fs::File, 
+    io::prelude::*, 
+    cmp::*, 
+    sync::Mutex, 
+    // time::*,
+    path:: PathBuf,
+};
 use std::collections::HashMap;
 use rand::Rng;
 
@@ -50,17 +57,19 @@ impl ObjectLabels {
 pub struct ObjectStack {
     objs: Vec<ObjectLabels>,
     cur_id: usize,
-    file_name: String,
+    fd: Option<File>,
 }
 
 impl ObjectStack {
     pub fn new() -> Self {
+        
         let mut objs = Vec::with_capacity(STACK_MAX);
         objs.push(ObjectLabels::new(false, 0)); //ROOT
         Self { 
         objs ,
         cur_id: 0,
-        file_name: String::new(),
+        // file_name: String::new(),
+        fd: None,
         }
     }
 
@@ -516,6 +525,7 @@ impl ObjectStack {
         ttsg: &TaintSeg,
         depth: usize,
         is_last: bool,
+        father_begin: u32,
     ){
         let blank = "  ".repeat(depth);
         let blank2 = "  ".repeat(depth+1);
@@ -526,9 +536,9 @@ impl ObjectStack {
         s.push_str(&format!("{}\"{:016X}\":\n", blank, ttsg.lb));
         s.push_str(&format!("{}{{\n",blank));
         //need check lb
-        s.push_str(&format!("{}\"{}\": {},\n",blank2, start, ttsg.begin)); //    "start": 0,
+        s.push_str(&format!("{}\"{}\": {},\n",blank2, start, ttsg.begin - father_begin)); //    "start": 0,
         if ttsg.son.is_none() {
-            s.push_str(&format!("{}\"{}\": {}\n",blank2, end, ttsg.end));
+            s.push_str(&format!("{}\"{}\": {}\n",blank2, end, ttsg.end - father_begin));
             if is_last {
                 s.push_str(&format!("{}}}\n",blank));
             }
@@ -537,7 +547,7 @@ impl ObjectStack {
             }
             return;
         }
-        s.push_str(&format!("{}\"{}\": {},\n",blank2, end, ttsg.end));     //    "end": 8,
+        s.push_str(&format!("{}\"{}\": {},\n",blank2, end, ttsg.end - father_begin));     //    "end": 8,
         let ttsg_sons = ttsg.son.as_ref().unwrap();
         s.push_str(&format!("{}\"{}\": {{\n",blank2, str_son)); 
         let mut has_last = true;
@@ -559,15 +569,15 @@ impl ObjectStack {
         // for (&i_sum, &i_son) in &label.sum.iter().zip(&label.son.iter()) {
             if i == ttsg_sons.len() - 1 {
                 if has_last {
-                    loop_handlers::ObjectStack::output_format(s, &ttsg_sons[i], depth+1, true);
+                    loop_handlers::ObjectStack::output_format(s, &ttsg_sons[i], depth+1, true, ttsg.begin);
                 }
                 else {
-                    loop_handlers::ObjectStack::output_format(s, &ttsg_sons[i], depth+1, false);
-                    loop_handlers::ObjectStack::output_format(s, &fake_last_seg, depth+1, true);
+                    loop_handlers::ObjectStack::output_format(s, &ttsg_sons[i], depth+1, false, ttsg.begin);
+                    loop_handlers::ObjectStack::output_format(s, &fake_last_seg, depth+1, true, ttsg.begin);
                 }
             }
             else {
-                loop_handlers::ObjectStack::output_format(s, &ttsg_sons[i], depth+1, false);
+                loop_handlers::ObjectStack::output_format(s, &ttsg_sons[i], depth+1, false, ttsg.begin);
                 
                 
             }
@@ -582,14 +592,22 @@ impl ObjectStack {
         }
     }
 
+    
     pub fn set_input_file_name(
         &mut self,
-        input_name: &mut String,
+        json_name: PathBuf,
     ){
-        // *input_name = input_name.replace(" ", "_");
-        // *input_name = input_name.replace(".", "__");
-        // input_name.push_str(".json");
-        self.file_name = input_name.to_string();
+        if self.fd.is_some() {
+            return;
+        }
+        // println!("json_name: {:?}", json_name);
+        let json_file = match File::create(json_name) {
+            Ok(a) => a,
+            Err(e) => {
+                panic!("FATAL: Could not create json file: {:?}", e);
+            }
+        };
+        self.fd = Some(json_file);
     }
 
     pub fn fini(
@@ -600,28 +618,31 @@ impl ObjectStack {
         s.push_str(&format!("{{\n"));
         for i in &self.objs[self.cur_id].sum {
             if &i == &self.objs[self.cur_id].sum.last().unwrap() {
-                loop_handlers::ObjectStack::output_format(&mut s, &i, 0, true);
+                loop_handlers::ObjectStack::output_format(&mut s, &i, 0, true, 0);
             }
             else {
-                loop_handlers::ObjectStack::output_format(&mut s, &i, 0, true);
+                loop_handlers::ObjectStack::output_format(&mut s, &i, 0, true, 0);
             }
         }
         s.push_str(&format!("}}\n"));
-        if self.file_name.len() == 0 {
-            let timestamp = {
-                let start = SystemTime::now();
-                let since_the_epoch = start
-                    .duration_since(UNIX_EPOCH)
-                    .expect("Time went backwards");
-                let ms = since_the_epoch.as_secs() as i64 * 1000i64 + (since_the_epoch.subsec_nanos() as f64 / 1_000_000.0) as i64;
-                ms
-            };
-            self.file_name.push_str("logfile_");
-            self.file_name.push_str(&timestamp.to_string());
-            self.file_name.push_str(".json");
+
+        // if self.file_name.len() == 0 {
+        //     let timestamp = {
+        //         let start = SystemTime::now();
+        //         let since_the_epoch = start
+        //             .duration_since(UNIX_EPOCH)
+        //             .expect("Time went backwards");
+        //         let ms = since_the_epoch.as_secs() as i64 * 1000i64 + (since_the_epoch.subsec_nanos() as f64 / 1_000_000.0) as i64;
+        //         ms
+        //     };
+        //     self.file_name.push_str("logfile_");
+        //     self.file_name.push_str(&timestamp.to_string());
+        //     self.file_name.push_str(".json");
+        // }
+        // let mut fd = File::create(&self.file_name).expect("Unable to create log file");
+        if self.fd.is_some() {
+            self.fd.as_ref().unwrap().write_all(s.as_bytes()).expect("Unable to write file");
         }
-        let mut fd = File::create(&self.file_name).expect("Unable to create log file");
-        fd.write_all(s.as_bytes()).expect("Unable to write file");
     }
 }
 

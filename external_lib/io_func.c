@@ -96,14 +96,13 @@ __dfsw_open(const char *path, int oflags, dfsan_label path_label,
 //  if (fd >= 0 && IS_FUZZING_FILE(path)) {
 //    add_fuzzing_fd(fd);
 //  }
-  set_input_file_name(path);
-  /*
+
   setenv("CHUNK_CURRENT_INPUT_FILE", path, 1);
   char *strEnv = "";
-  strEnv = getenv("CHUNK_CURRENT_INPUT_FILE");
-  printf("CHUNK_CURRENT_INPUT_FILE: %s\n",strEnv);
-  */
-
+  // strEnv = getenv("CHUNK_CURRENT_INPUT_FILE");
+  // printf("CHUNK_CURRENT_INPUT_FILE: %s\n",strEnv);
+  set_input_file_name();
+  
   *ret_label = 0;
   return fd;
 }
@@ -121,13 +120,13 @@ __dfsw_fopen(const char *filename, const char *mode, dfsan_label fn_label,
 //  if (fd && IS_FUZZING_FILE(filename)) {
 //    add_fuzzing_ffd(fd);
 //  }
-  set_input_file_name(filename);
-  /*
-  setenv("CHUNK_CURRENT_INPUT_FILE", path, 1);
+  
+  setenv("CHUNK_CURRENT_INPUT_FILE", filename, 1);
   char *strEnv = "";
-  strEnv = getenv("CHUNK_CURRENT_INPUT_FILE");
-  printf("CHUNK_CURRENT_INPUT_FILE: %s\n",strEnv);
-  */
+  // strEnv = getenv("CHUNK_CURRENT_INPUT_FILE");
+  // printf("CHUNK_CURRENT_INPUT_FILE: %s\n",strEnv);
+  set_input_file_name();
+
   *ret_label = 0;
   return fd;
 }
@@ -145,6 +144,12 @@ __dfsw_fopen64(const char *filename, const char *mode, dfsan_label fn_label,
 //    add_fuzzing_ffd(fd);
 //  }
 
+  setenv("CHUNK_CURRENT_INPUT_FILE", filename, 1);
+  char *strEnv = "";
+  // strEnv = getenv("CHUNK_CURRENT_INPUT_FILE");
+  // printf("CHUNK_CURRENT_INPUT_FILE: %s\n",strEnv);
+  set_input_file_name();
+  
   *ret_label = 0;
   return fd;
 }

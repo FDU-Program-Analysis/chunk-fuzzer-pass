@@ -7,7 +7,8 @@ extern "C" {
 
 void __chunk_object_stack_fini();
 
-void __chunk_set_input_file_name(const char* name);
+void __chunk_set_input_file_name();
+    // const char* name
 
 #ifdef __cplusplus
 }
