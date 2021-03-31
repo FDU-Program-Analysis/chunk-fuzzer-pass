@@ -182,7 +182,7 @@ pub extern "C" fn __chunk_trace_cmp_tt(
 
 #[no_mangle]
 pub extern "C" fn __dfsw___chunk_trace_cmp_tt(
-    _size: u32,
+    size: u32,
     op: u32,
     arg1: u64,
     arg2: u64,
@@ -204,7 +204,8 @@ pub extern "C" fn __dfsw___chunk_trace_cmp_tt(
     if lb1 == 0 && lb2 == 0 {
         return;
     }
-    let mut size = 0;
+    let mut size1 = 0;
+    let mut size2 = 0;
 
     if in_loop_header == 1 {
 
@@ -220,6 +221,13 @@ pub extern "C" fn __dfsw___chunk_trace_cmp_tt(
             }
         }
     }
+    infer_shape(lb1, size);
+    infer_shape(lb2, size);
+    let mut osl = OS.lock().unwrap();
+    if let Some(ref mut os) = *osl {
+        size1 = os.get_load_label(lb1);
+        size2 = os.get_load_label(lb2);
+    }
 
     let op = infer_eq_sign(op, lb1, lb2);
     if op == 32 || op == 33 {
@@ -228,77 +236,51 @@ pub extern "C" fn __dfsw___chunk_trace_cmp_tt(
             if arg2 == 0 {
                 return;
             }
-            let mut osl = OS.lock().unwrap();
-            if let Some(ref mut os) = *osl {
-                os.get_load_label(lb1);
-                // println!("lb : {}, {:?}",lb1, tag_set_find(lb1.try_into().unwrap()));
-                size = loop_handlers::ObjectStack::access_check(lb1 as u64, 0);
-            }
-
+            
             let vec8 = arg2.to_le_bytes().to_vec();
-            let slice_vec8 = &vec8[..size as usize];
+            let slice_vec8 = &vec8[..size1 as usize];
             let vec8 = slice_vec8.to_vec();
             
-            log_enum(size, lb1 as u64, vec8);
+            log_enum(size1, lb1 as u64, vec8);
             return;
         }
         else if lb1 == 0 && lb2 != 0 && is_cnst1 == 1 {
             if arg1 == 0 {
                 return;
             }
-            let mut osl = OS.lock().unwrap();
-            if let Some(ref mut os) = *osl {
-                os.get_load_label(lb2);
-                // println!("lb: {}, {:?}", lb2, tag_set_find(lb2.try_into().unwrap()));
-                size = loop_handlers::ObjectStack::access_check(lb2 as u64, 0);
-            }
+            
             let vec8 = arg1.to_le_bytes().to_vec();
-            let slice_vec8 = &vec8[..size as usize];
+            let slice_vec8 = &vec8[..size2 as usize];
             let vec8 = slice_vec8.to_vec();
             
-            log_enum(size, lb2 as u64, vec8);
+            log_enum(size2, lb2 as u64, vec8);
             return;
         }
         else if lb1 != 0 && lb2 != 0 {
             //maybe checksum
-            //检查find label的vec长度超过size
-            
-            let list1 = tag_set_find(lb1.try_into().unwrap());
-            let list2 = tag_set_find(lb2.try_into().unwrap());
-            let size1 = if list1.len()>0 { list1[list1.len()-1].end-list1[0].begin} else {0};
-            let size2 = if list2.len()>0 { list2[list2.len()-1].end-list2[0].begin} else {0};
-
-            // __angora_tag_set_show(lb1.try_into().unwrap());
-            // __angora_tag_set_show(lb2.try_into().unwrap());
-            // println!("size {0},arg1 {1},arg2 {2}", size, size1, size2);
-            
-            // op为0 size用payload长度 lb1是metadata lb2是payload
-            if size2 > 3*size1 {
-                // let mut osl = OS.lock().unwrap();
-                // if let Some(ref mut os) = *osl {
-                //     os.get_load_label(lb1);
-                //     os.get_load_label(lb2);
-                // }
-                log_cond(0, size2, lb1 as u64, lb2 as u64, ChunkField::Checksum);
-                // println!("__chunk_trace_cmp_tt : <{0}, {1}, checksum>", lb1, lb2);
-            } else if size1 > 3*size2 {
-                // let mut osl = OS.lock().unwrap();
-                // if let Some(ref mut os) = *osl {
-                //     os.get_load_label(lb1);
-                //     os.get_load_label(lb2);
-                // }
-                log_cond(0, size1, lb2 as u64, lb1 as u64, ChunkField::Checksum);
-                // println!("__chunk_trace_cmp_tt : <{1}, {0}, checksum>", lb1, lb2);
+            //一个标签对应的数据长度等于size,另一个大于size
+            //continous data
+            if size1 != 0 && size2 != 0 {
+                let list1 = tag_set_find(lb1.try_into().unwrap());
+                let list2 = tag_set_find(lb2.try_into().unwrap());
+                if size1 == size && size2 > size {
+                    if list1.len() == 1 && list2.len() != 1 {
+                        log_cond(0, size2, lb1 as u64, lb2 as u64, ChunkField::Checksum);
+                        return;
+                    }
+                    
+                }
+                else if size1 > size && size2 == size {
+                    if list1.len() != 1 && list2.len() == 1 {
+                        log_cond(0, size1, lb2 as u64, lb1 as u64, ChunkField::Checksum);
+                        return;
+                    }
+                    
+                }
             }
-            return;
         }
     }
     if lb1 != 0 && lb2 != 0 {
-        let mut osl = OS.lock().unwrap();
-        if let Some(ref mut os) = *osl {
-            os.get_load_label(lb1);
-            os.get_load_label(lb2);
-        }
         log_cond(op, size, lb1 as u64, lb2 as u64, ChunkField::Constraint);
     }
 }
@@ -336,8 +318,7 @@ pub extern "C" fn __dfsw___chunk_trace_switch_tt(
     let sw_args = unsafe { slice::from_raw_parts(args, num as usize) }.to_vec();
     let mut osl = OS.lock().unwrap();
     if let Some(ref mut os) = *osl {
-        os.get_load_label(lb);
-        size = loop_handlers::ObjectStack::access_check(lb as u64, 0);
+        size = os.get_load_label(lb);
     }
     for arg in sw_args {
         let vec8 = arg.to_le_bytes().to_vec();

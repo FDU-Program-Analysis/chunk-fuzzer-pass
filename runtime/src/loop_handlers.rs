@@ -362,10 +362,10 @@ impl ObjectStack {
     pub fn get_load_label(
         &mut self,
         lb: u32,
-    ) {
-        
-        if loop_handlers::ObjectStack::access_check(lb as u64, 0) != 0 {
-            return;
+    ) -> u32 {
+        let saved = loop_handlers::ObjectStack::access_check(lb as u64, 0);
+        if saved != 0 {
+            return saved;
         }
         let mut set_list = tag_set_wrap::tag_set_find(lb as usize);
 
@@ -380,14 +380,16 @@ impl ObjectStack {
             if let Some(ref mut lc) = *lcl {
                 lc.save_linear_constraint(lb)
             }
-            return;
+            return 0;
         }
         if list.len() != 0 {
             // println!("load: lb {}, {:?}", lb, list);
             let size = list[0].end - list[0].begin;
             self.insert_labels(&mut list);
             loop_handlers::ObjectStack::access_check(lb as u64, size);
+            return size;
         }
+        return 0;
     }
 
     
