@@ -632,7 +632,7 @@ void LoopHandlingPass::processCmp(Instruction *Cond, Instruction *InsertPoint, b
     }
   }
   Value *TypeArg = ConstantInt::get(Int32Ty, predicate);
-  // outs() << "\t" << predicate << "\n" ;
+  // errs() << "!!!\t" << predicate << "\n" ;
   
   // Instruction *InsertPoint = Inst->getNextNode();
   IRBuilder<> IRB(InsertPoint);
@@ -653,7 +653,7 @@ void LoopHandlingPass::processBoolCmp(Value *Cond, Instruction *InsertPoint, boo
 
   Value *SizeArg = ConstantInt::get(Int32Ty, 1);
   Value *TypeArg = ConstantInt::get(Int32Ty, COND_EQ_OP | COND_BOOL_MASK);
-  // outs() << "\tBoolCmp: " << SizeArg->getValueName() << TypeArg->getValueName() << OpArg[1]->getValueName() << "\n";
+  // errs() << "\t!!!BoolCmp: " << SizeArg->getValueName() << TypeArg->getValueName() << OpArg[1]->getValueName() << "\n";
   
   IRBuilder<> IRB(InsertPoint);
   Value *CondExt = IRB.CreateZExt(Cond, Int32Ty);
@@ -747,8 +747,8 @@ bool LoopHandlingPass::runOnModule(Module &M) {
           visitInvokeInst(&Inst);
         else if (isa<LoadInst>(&Inst)) {
           visitLoadInst(&Inst);
-        } else if (isa<BranchInst>(&Inst)) {
-          visitBranchInst(&Inst, in_loop_header);
+        // } else if (isa<BranchInst>(&Inst)) {
+        //   visitBranchInst(&Inst, in_loop_header);
         } else if (isa<SwitchInst>(&Inst)) {
           visitSwitchInst(M, &Inst);
         } else if (isa<CmpInst>(&Inst)) {
@@ -789,9 +789,7 @@ bool LoopHandlingPass::runOnModule(Module &M) {
       L->getUniqueExitBlocks(Exits);
       for(BasicBlock *BB : Exits) {
         // errs() << "\nexit block : \n" << *BB;
-        BasicBlock::iterator i = BB->begin();
-        Instruction* ExitI =  &*i;
-        IRBuilder<> ExitBuilder(ExitI);
+        IRBuilder<> ExitBuilder(&*BB->getFirstInsertionPt());
         LoadInst *LoadLoopCnt2 = ExitBuilder.CreateLoad(LoopCnt);
         ExitBuilder.CreateCall(DumpEachIterFn,{LoadLoopCnt2});
         ExitBuilder.CreateCall(PopObjFn, {HLoop});
