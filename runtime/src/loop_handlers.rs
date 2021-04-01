@@ -486,7 +486,7 @@ impl ObjectStack {
             //     println!("pop obj: {:?}", top_obj.sum);
             // }
             
-            if top_obj.hash != hash {
+            if hash != 0 && top_obj.hash != hash {
                 panic!("[ERR] :pop error! incorrect Hash {} #[ERR]", top_obj.hash);
             }
             else {
@@ -615,6 +615,10 @@ impl ObjectStack {
     pub fn fini(
         &mut self,
     ) {
+        println!("fini: cur_id: {}, objs:{:?}",self.cur_id,self.objs);
+        while self.cur_id != 0 {
+            self.pop_obj(0);
+        }
         let mut s = String::new();
         loop_handlers::ObjectStack::construct_tree(&mut self.objs[self.cur_id].sum);
         s.push_str(&format!("{{\n"));
