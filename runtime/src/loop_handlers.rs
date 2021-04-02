@@ -612,12 +612,33 @@ impl ObjectStack {
         self.fd = Some(json_file);
     }
 
+    fn patch_up(
+        &mut self,
+    ) {
+        let origin_length = self.objs[self.cur_id].sum.len();
+        let mut rng = rand::thread_rng();
+        for i in 0 .. origin_length - 1 {
+            if self.objs[self.cur_id].sum[i].end < self.objs[self.cur_id].sum[i+1].begin {
+                let fake_ttsg = TaintSeg{
+                    lb: rng.gen_range(0..0x10000000)+0x20000000,
+                    begin: self.objs[self.cur_id].sum[i].end,
+                    end: self.objs[self.cur_id].sum[i+1].begin,
+                    son: None,
+                };
+                self.objs[self.cur_id].sum.push(fake_ttsg);
+            }
+        }
+    }
+
     pub fn fini(
         &mut self,
     ) {
-        println!("fini: cur_id: {}, objs:{:?}",self.cur_id,self.objs);
+        // println!("fini: cur_id: {}, objs:{:?}",self.cur_id,self.objs);
         while self.cur_id != 0 {
             self.pop_obj(0);
+        }
+        if self.objs[self.cur_id].sum.len() > 1 {
+            self.patch_up();
         }
         let mut s = String::new();
         loop_handlers::ObjectStack::construct_tree(&mut self.objs[self.cur_id].sum);
