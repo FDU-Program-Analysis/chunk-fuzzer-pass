@@ -3,7 +3,7 @@
 BIN_PATH=$(readlink -f "$0")
 ROOT_DIR=$(dirname $(dirname $(dirname $BIN_PATH)))
 
-LLVM_VERSION=7.0.0
+LLVM_VERSION=10.0.0
 
 NINJA_B=`which ninja 2>/dev/null`
 
@@ -19,13 +19,13 @@ CUR_DIR=`pwd`
 CLANG_SRC=${CUR_DIR}/llvm_src
 
 if [ ! -d $CLANG_SRC ]; then
-wget http://releases.llvm.org/${LLVM_VERSION}/llvm-${LLVM_VERSION}.src.tar.xz
-wget http://releases.llvm.org/${LLVM_VERSION}/cfe-${LLVM_VERSION}.src.tar.xz
-wget http://releases.llvm.org/${LLVM_VERSION}/compiler-rt-${LLVM_VERSION}.src.tar.xz
-wget http://releases.llvm.org/${LLVM_VERSION}/libcxx-${LLVM_VERSION}.src.tar.xz
-wget http://releases.llvm.org/${LLVM_VERSION}/libcxxabi-${LLVM_VERSION}.src.tar.xz
-wget http://releases.llvm.org/${LLVM_VERSION}/libunwind-${LLVM_VERSION}.src.tar.xz
-wget http://releases.llvm.org/${LLVM_VERSION}/clang-tools-extra-${LLVM_VERSION}.src.tar.xz
+wget https://github.com/llvm/llvm-project/releases/download/llvmorg-${LLVM_VERSION}/llvm-${LLVM_VERSION}.src.tar.xz
+wget https://github.com/llvm/llvm-project/releases/download/llvmorg-${LLVM_VERSION}/cfe-${LLVM_VERSION}.src.tar.xz
+wget https://github.com/llvm/llvm-project/releases/download/llvmorg-${LLVM_VERSION}/compiler-rt-${LLVM_VERSION}.src.tar.xz
+wget https://github.com/llvm/llvm-project/releases/download/llvmorg-${LLVM_VERSION}/libcxx-${LLVM_VERSION}.src.tar.xz
+wget https://github.com/llvm/llvm-project/releases/download/llvmorg-${LLVM_VERSION}/libcxxabi-${LLVM_VERSION}.src.tar.xz
+wget https://github.com/llvm/llvm-project/releases/download/llvmorg-${LLVM_VERSION}/libunwind-${LLVM_VERSION}.src.tar.xz
+wget https://github.com/llvm/llvm-project/releases/download/llvmorg-${LLVM_VERSION}/clang-tools-extra-${LLVM_VERSION}.src.tar.xz
 
 
 rm -rf $CLANG_SRC
@@ -65,7 +65,7 @@ ninja cxx cxxabi
 cd ..
 mkdir build_track && cd build_track/
 
-CC=${ROOT_DIR}/bin/angora-clang CXX=${ROOT_DIR}/bin/angora-clang++ cmake -G Ninja ../llvm_src  -DLIBCXXABI_ENABLE_SHARED=NO -DLIBCXX_ENABLE_SHARED=NO -DLIBCXX_CXX_ABI=libcxxabi 
+USE_FAST=1 CC=${ROOT_DIR}/install/test-clang CXX=${ROOT_DIR}/install/test-clang++ cmake -G Ninja ../llvm_src  -DLIBCXXABI_ENABLE_SHARED=NO -DLIBCXX_ENABLE_SHARED=NO -DLIBCXX_CXX_ABI=libcxxabi 
 #-DLLVM_FORCE_USE_OLD_TOOLCHAIN=YES 
 USE_DFSAN=1 ninja cxx cxxabi
 
