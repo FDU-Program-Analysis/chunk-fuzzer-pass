@@ -240,10 +240,10 @@ pub extern "C" fn __dfsw___chunk_trace_cmp_tt(
             }
             
             let vec8 = arg2.to_le_bytes().to_vec();
-            let slice_vec8 = &vec8[..size1 as usize];
+            let slice_vec8 = &vec8[..size2 as usize]; 
             let vec8 = slice_vec8.to_vec();
             
-            log_enum(size1, lb1 as u64, vec8);
+            log_enum(size2, lb1 as u64, vec8);
             return;
         }
         else if lb1 == 0 && lb2 != 0 && is_cnst1 == 1 {
@@ -252,10 +252,10 @@ pub extern "C" fn __dfsw___chunk_trace_cmp_tt(
             }
             
             let vec8 = arg1.to_le_bytes().to_vec();
-            let slice_vec8 = &vec8[..size2 as usize];
+            let slice_vec8 = &vec8[..size1 as usize];
             let vec8 = slice_vec8.to_vec();
             
-            log_enum(size2, lb2 as u64, vec8);
+            log_enum(size1, lb2 as u64, vec8);
             return;
         }
         else if lb1 != 0 && lb2 != 0 {
