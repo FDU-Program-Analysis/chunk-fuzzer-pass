@@ -185,7 +185,7 @@ struct LoopHandlingPass : public ModulePass {
 
   void processCmp(Instruction *Cond, Instruction *InsertPoint, bool loop);
   void processBoolCmp(Value *Cond, Instruction *InsertPoint,bool loop);
-  void processCallInst(Instruction *Inst);
+  void processCallInst(Instruction *Inst, u32 hFunc);
   void processLoadInst(Instruction *Cond, Instruction *InsertPoint);
 
   void getAnalysisUsage(AnalysisUsage &AU) const override {
@@ -263,8 +263,6 @@ u32 LoopHandlingPass::getLoopId(Loop *L) {
 u32 LoopHandlingPass::getFunctionId(Function *F) {
   return hashName(F->getName());
 }
-
-std::set<u32> InstrumentedLoopSet;
 
 void LoopHandlingPass::initVariables(Module &M) {
   auto &CTX = M.getContext();
@@ -459,14 +457,24 @@ void LoopHandlingPass::visitCallInst(Instruction *Inst) {
   CallInst *Caller = dyn_cast<CallInst>(Inst);
   Function *Callee = Caller->getCalledFunction();
 
+  if (!Callee || isa<InlineAsm>(Caller->getCalledValue())) {
+    return;
+  }
   visitExploitation(Inst);
 
-  if (!Callee || Callee->isIntrinsic() || isa<InlineAsm>(Caller->getCalledValue())) {
+  if (Callee->isIntrinsic()) {
+    return;
+  }
+  if (Callee->getName().startswith(StringRef("__chunk_")) || Callee->getName().startswith(StringRef("__dfsw_")) ||Callee->getName().startswith(StringRef("asan.module"))) {
+    return;
+  }
+  if (Callee->isDeclaration()) {
     return;
   }
 
   // instrument before CALL
-  processCallInst(Inst);
+  u32 hFunc = getFunctionId(Callee);
+  processCallInst(Inst, hFunc);
 };
 
 void LoopHandlingPass::visitInvokeInst(Instruction *Inst) {
@@ -474,15 +482,25 @@ void LoopHandlingPass::visitInvokeInst(Instruction *Inst) {
   InvokeInst *Caller = dyn_cast<InvokeInst>(Inst);
   Function *Callee = Caller->getCalledFunction();
 
+  if (!Callee || isa<InlineAsm>(Caller->getCalledValue())) {
+    return;
+  }
   visitExploitation(Inst);
 
-  if (!Callee || Callee->isIntrinsic() ||
-      isa<InlineAsm>(Caller->getCalledValue())) {
+  if (Callee->isIntrinsic()) {
     return;
   }
 
+  if (Callee->getName().startswith(StringRef("__chunk_")) || Callee->getName().startswith(StringRef("__dfsw_")) ||Callee->getName().startswith(StringRef("asan.module"))) {
+    return;
+  }
+  if (Callee->isDeclaration()) {
+    return;
+  }
+
+  u32 hFunc = getFunctionId(Callee);
   // instrument before INVOKE
-  processCallInst(Inst);
+  processCallInst(Inst, hFunc);
 }
 
 void LoopHandlingPass::visitLoadInst(Instruction *Inst) {
@@ -562,10 +580,12 @@ void LoopHandlingPass::visitCmpInst(Instruction *Inst, bool in_loop_header) {
   processCmp(Inst, InsertPoint,in_loop_header);
 }
 
-// TODO
 void LoopHandlingPass::visitExploitation(Instruction *Inst) {
 
   Instruction* AfterCall= Inst->getNextNonDebugInstruction();
+  if (!AfterCall) {
+    return;
+  }
   IRBuilder<> AfterBuilder(AfterCall);
   CallInst *Caller = dyn_cast<CallInst>(Inst);
   
@@ -647,9 +667,7 @@ void LoopHandlingPass::processCmp(Instruction *Cond, Instruction *InsertPoint, b
     }
   }
   Value *TypeArg = ConstantInt::get(Int32Ty, predicate);
-  // errs() << "!!!\t" << predicate << "\n" ;
   
-  // Instruction *InsertPoint = Inst->getNextNode();
   IRBuilder<> IRB(InsertPoint);
   Value *CondExt = IRB.CreateZExt(Cond, Int32Ty);
   OpArg[0] = castArgType(IRB, OpArg[0]);
@@ -668,7 +686,6 @@ void LoopHandlingPass::processBoolCmp(Value *Cond, Instruction *InsertPoint, boo
 
   Value *SizeArg = ConstantInt::get(Int32Ty, 1);
   Value *TypeArg = ConstantInt::get(Int32Ty, COND_EQ_OP | COND_BOOL_MASK);
-  // errs() << "\t!!!BoolCmp: " << SizeArg->getValueName() << TypeArg->getValueName() << OpArg[1]->getValueName() << "\n";
   
   IRBuilder<> IRB(InsertPoint);
   Value *CondExt = IRB.CreateZExt(Cond, Int32Ty);
@@ -684,23 +701,16 @@ void LoopHandlingPass::processBoolCmp(Value *Cond, Instruction *InsertPoint, boo
 }
 
 
-void LoopHandlingPass::processCallInst(Instruction *Inst) {
-  CallInst *Caller = dyn_cast<CallInst>(Inst);
-  Function *Func = Caller->getCalledFunction();
+void LoopHandlingPass::processCallInst(Instruction *Inst, u32 hFunc) {
+
+  Instruction* AfterCall= Inst->getNextNonDebugInstruction();
+  if (!AfterCall) {
+    return;
+  }
   
-
-  if (Func->getName().startswith(StringRef("__chunk_")) || Func->getName().startswith(StringRef("__dfsw_")) ||Func->getName().startswith(StringRef("asan.module"))) {
-    return;
-  }
-  if (Func->isDeclaration()) {
-    return;
-  }
-
-  u32 hFunc = getFunctionId(Func);
   ConstantInt *HFunc = ConstantInt::get(Int32Ty, hFunc);
   IRBuilder<> BeforeBuilder(Inst);
   CallInst *Call1 = BeforeBuilder.CreateCall(PushNewObjFn,{BoolFalse,  NumZero, HFunc});
-  Instruction* AfterCall= Inst->getNextNonDebugInstruction();
   IRBuilder<> AfterBuilder(AfterCall);
   Value *PopObjRet = AfterBuilder.CreateCall(PopObjFn, {HFunc});
 
