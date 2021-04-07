@@ -36,6 +36,7 @@ static u8 **cc_params;     /* Parameters passed to the real CC  */
 static u32 cc_par_cnt = 1; /* Param count, including argv0      */
 static u8 clang_type = CLANG_TRACK_TYPE;
 static u8 is_cxx = 0;
+u8 need_lz = 0;
 
 /* Try to find the runtime libraries. If that fails, abort. */
 static void find_obj(u8 *argv0) {
@@ -75,6 +76,11 @@ static void check_type(char *name) {
     clang_type = CLANG_TRACK_TYPE;
   } else if (use_pin) {
     clang_type = CLANG_PIN_TYPE;
+  }
+  u8 *use_zlib = getenv("USE_ZLIB");
+  printf("use_zlib: %s\n", use_zlib);
+  if (use_zlib) {
+    need_lz = 1;
   }
   if (!strcmp(name, "test-clang++")) {
     is_cxx = 1;
@@ -117,7 +123,8 @@ static void add_runtime() {
 
     cc_params[cc_par_cnt++] = alloc_printf("%s/lib/libruntime.a", obj_path);
     cc_params[cc_par_cnt++] = alloc_printf("%s/lib/libDFSanIO.a", obj_path);
-    cc_params[cc_par_cnt++] = alloc_printf("%s/lib/libZlibRt.a", obj_path);
+    if (need_lz != 0)
+      cc_params[cc_par_cnt++] = alloc_printf("%s/lib/libZlibRt.a", obj_path);
     char *rule_obj = getenv(TAINT_CUSTOM_RULE_VAR);
     if (rule_obj) {
       cc_params[cc_par_cnt++] = rule_obj;
@@ -134,7 +141,8 @@ static void add_runtime() {
   cc_params[cc_par_cnt++] = "-ldl";
   cc_params[cc_par_cnt++] = "-lpthread";
   cc_params[cc_par_cnt++] = "-lm";
-  cc_params[cc_par_cnt++] = "-lz";
+  if (need_lz != 0)
+    cc_params[cc_par_cnt++] = "-lz";
 }
 
 static void add_dfsan_pass() {
@@ -148,9 +156,12 @@ static void add_dfsan_pass() {
     cc_params[cc_par_cnt++] = "-mllvm";
     cc_params[cc_par_cnt++] =
         alloc_printf("-chunk-dfsan-abilist=%s/rules/dfsan_abilist.txt", obj_path);
-    cc_params[cc_par_cnt++] = "-mllvm";
-    cc_params[cc_par_cnt++] =
-        alloc_printf("-chunk-dfsan-abilist=%s/rules/zlib_abilist.txt", obj_path);
+    if (need_lz != 0 ) {
+      cc_params[cc_par_cnt++] = "-mllvm";
+      cc_params[cc_par_cnt++] =
+          alloc_printf("-chunk-dfsan-abilist=%s/rules/zlib_abilist.txt", obj_path);
+    }
+    
     char *rule_list = getenv(TAINT_RULE_LIST_VAR);
     if (rule_list) {
       cc_params[cc_par_cnt++] = "-mllvm";
@@ -278,7 +289,15 @@ static void edit_params(u32 argc, char **argv) {
 
 
   if (is_cxx) {
-    if (clang_type == CLANG_TRACK_TYPE) {
+    if (clang_type == CLANG_FAST_TYPE) {
+      cc_params[cc_par_cnt++] = alloc_printf("-L%s/lib/libcxx_fast/", obj_path);
+      cc_params[cc_par_cnt++] = "-stdlib=libc++";
+      cc_params[cc_par_cnt++] = "-Wl,--start-group";
+      cc_params[cc_par_cnt++] = "-lc++abifast";
+      cc_params[cc_par_cnt++] = "-lc++abi";
+      cc_params[cc_par_cnt++] = "-Wl,--end-group";
+    }
+    else if (clang_type == CLANG_TRACK_TYPE) {
     cc_params[cc_par_cnt++] = alloc_printf("-L%s/lib/libcxx_track/", obj_path);
     cc_params[cc_par_cnt++] = "-stdlib=libc++";
     cc_params[cc_par_cnt++] = "-Wl,--start-group";
@@ -350,7 +369,7 @@ int main(int argc, char **argv) {
 
   edit_params(argc, argv);
   
-  printf("obj_path: %s\n", obj_path);
+  // printf("obj_path: %s\n", obj_path);
 
   for (int i = 0; i < cc_par_cnt; i++) {
     printf("%s ", cc_params[i]);
