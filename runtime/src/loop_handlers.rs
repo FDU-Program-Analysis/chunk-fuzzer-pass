@@ -58,6 +58,7 @@ pub struct ObjectStack {
     objs: Vec<ObjectLabels>,
     cur_id: usize,
     fd: Option<File>,
+    access_counter: u32,
 }
 
 impl ObjectStack {
@@ -70,6 +71,7 @@ impl ObjectStack {
         cur_id: 0,
         // file_name: String::new(),
         fd: None,
+        access_counter: 1,
         }
     }
 
@@ -100,6 +102,7 @@ impl ObjectStack {
 
     // SegTag-> TaintTag ,minimize
     pub fn seg_tag_2_taint_tag(
+        &mut self,
         lb: u64,
         list : &mut Vec<TagSeg>, 
     )-> Vec<TaintSeg> {
@@ -126,9 +129,11 @@ impl ObjectStack {
                         begin: cur_begin, 
                         end: cur_end,
                         son: None,
+                        cntr: self.access_counter,
                     });
                     cur_begin = i.begin;
                     cur_end = i.end;
+                    self.access_counter += 1;
                 } 
                 else {
                     cur_end = max(i.end, cur_end);
@@ -141,7 +146,9 @@ impl ObjectStack {
                 begin: cur_begin, 
                 end: cur_end,
                 son: None,
+                cntr: self.access_counter,
             });
+            self.access_counter += 1;
         }
         new_list
     }
@@ -232,22 +239,107 @@ impl ObjectStack {
         }
     }
 
-    pub fn construct_tree(
+    pub fn handle_overlap (
         list : &mut Vec<TaintSeg>,
     ) {
+        if list.len() <= 1 {
+            return;
+        }
+        let mut retain_list = vec![];
+        for i in 0 .. list.len() {
+            if list[i].cntr == u32::MAX {
+                retain_list.push(list[i].clone());
+            }
+            else if list[i].son.is_some() {
+                retain_list.push(list[i].clone());
+            };
+        }
+        for i in 0 .. retain_list.len() {
+            if let Some(index) = list.iter().position(|x| *x == retain_list[i]) {
+                list.remove(index);
+            };
+        }
+        println!("remove combine: {:?}", list);
+        if list.len() <= 1 {
+            list.append(&mut retain_list);
+            return;
+        }
+        let mut overlap_start = usize::MAX;
+        let mut overlap_end = usize::MAX;
+        
         list.sort_by(|a, b| {
             match a.begin.cmp(&b.begin) {
                 Ordering::Equal => b.end.cmp(&a.end),
                 other => other,
             }
         });
-        // println!("vec to minimize: {:?}", list);
+        for i in 0 .. list.len()-1 {
+            match loop_handlers::ObjectStack::seg_relation(&list[i], &list[i+1]) {
+                SegRelation::RightOverlap => {
+                    if overlap_start == usize::MAX {
+                        overlap_start = i;
+                    }
+                    overlap_end = i+1;
+                    println!("1");
+                },
+                _ => {
+                    retain_list.push(list[i].clone());
+                    println!("2");
+                    if overlap_start != usize::MAX && overlap_end != usize::MAX {
+                        if list[overlap_start].cntr > list[overlap_end].cntr {
+                            retain_list.push(list[overlap_start].clone());
+                        }
+                        else {
+                            retain_list.push(list[overlap_end].clone());
+                        }
+                        overlap_start = usize::MAX;
+                        overlap_end = usize::MAX;
+                        println!("3");
+                    }
+                }
+            };
+        }
+
+        if overlap_start == usize::MAX && overlap_end == usize::MAX {
+            retain_list.push(list[list.len()-1].clone());
+            println!("4");
+        }
+        else {
+            if list[overlap_start].cntr > list[overlap_end].cntr {
+                retain_list.push(list[overlap_start].clone());
+            }
+            else {
+                retain_list.push(list[overlap_end].clone());
+            }
+            println!("5");
+        }
+        println!("after handle_overlap : {:?}", retain_list);
+        list.clear();
+        list.append(&mut retain_list);
+        
+    }
+
+    pub fn construct_tree(
+        mut list : &mut Vec<TaintSeg>,
+    ) {
+        loop_handlers::ObjectStack::handle_overlap(&mut list);
+        if list.len() <= 1 {
+            return;
+        }
+        list.sort_by(|a, b| {
+            match a.begin.cmp(&b.begin) {
+                Ordering::Equal => b.end.cmp(&a.end),
+                other => other,
+            }
+        });
+        println!("vec to minimize: {:?}", list);
         let mut new_list = vec![];
         let none_ts = TaintSeg{
             lb: 0,
             begin: 0,
             end: 0,
             son: Some(vec![]),
+            cntr: u32::MAX,
         };
         let mut cur_ts = none_ts.clone();
         for i in 0 .. list.len() {
@@ -301,7 +393,11 @@ impl ObjectStack {
                     SegRelation::RightOverlap => {
                         if cur_ts.son.is_none() && list[i].son.is_none() {
                             println!("two none");
-                            //拆开两个
+                            println!("overlap1: {:?}\noverlap2: {:?}",cur_ts, list[i]);
+                            //保留最后access的那个
+                            //不能一个一个地插，否则还得改树
+
+
                         }
                         if loop_handlers::ObjectStack::access_check(cur_ts.lb as u64, 0) == 0 {
                             // lb comes from hash_combine
@@ -373,7 +469,7 @@ impl ObjectStack {
         //     println!("prelist: {:?}", set_list);
         // }
         
-        let mut list = loop_handlers::ObjectStack::seg_tag_2_taint_tag(lb as u64, &mut set_list);
+        let mut list = self.seg_tag_2_taint_tag(lb as u64, &mut set_list);
 
         if list.len() > 1 {
             let mut lcl = LC.lock().unwrap();
@@ -558,7 +654,9 @@ impl ObjectStack {
             begin: 0,
             end: 0,
             son: None,
+            cntr: u32::MAX,
         };
+        //complete tail
         if ttsg.end != ttsg_sons[ttsg_sons.len() - 1].end {
             has_last = false;
             let mut rng = rand::thread_rng();
@@ -624,6 +722,7 @@ impl ObjectStack {
                     begin: self.objs[self.cur_id].sum[i].end,
                     end: self.objs[self.cur_id].sum[i+1].begin,
                     son: None,
+                    cntr: u32::MAX,
                 };
                 self.objs[self.cur_id].sum.push(fake_ttsg);
             }
@@ -637,6 +736,7 @@ impl ObjectStack {
         while self.cur_id != 0 {
             self.pop_obj(0);
         }
+        //complete vacancies chunk
         if self.objs[self.cur_id].sum.len() > 1 {
             self.patch_up();
         }

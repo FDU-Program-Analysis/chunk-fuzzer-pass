@@ -15,6 +15,7 @@ pub struct TaintSeg {
     pub begin: u32,
     pub end: u32,
     pub son: Option<Vec<TaintSeg>>,
+    pub cntr: u32,
     //pub is_loop: bool,
 }
 
