@@ -76,6 +76,13 @@ impl Logger {
         }
     }
 
+    pub fn erase_lb(&mut self, lb: u64) {
+        &self.data.enums.remove(&lb);
+        &self.data.tags.remove(&lb);
+        if let Some(index) = self.data.cond_list.iter().position(|x| x.lb1 == lb || x.lb2 == lb) {
+            self.data.cond_list.remove(index);
+        };
+    }
     /*
     // like the fn in fparser.rs
     pub fn get_order(&mut self, cond: &mut CondStmtBase) -> u32 {

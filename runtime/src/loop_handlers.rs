@@ -239,6 +239,16 @@ impl ObjectStack {
         }
     }
 
+    pub fn erase_lb_wrapper(
+        list : &Vec<u64>,
+    ) {
+        let mut lcl = LC.lock().unwrap();
+        if let Some(ref mut lc) = *lcl {
+            for i in list {
+                lc.erase_lb(*i);
+            }
+        }
+    }
     pub fn handle_overlap (
         list : &mut Vec<TaintSeg>,
     ) {
@@ -259,14 +269,13 @@ impl ObjectStack {
                 list.remove(index);
             };
         }
-        println!("remove combine: {:?}", list);
         if list.len() <= 1 {
             list.append(&mut retain_list);
             return;
         }
         let mut overlap_start = usize::MAX;
         let mut overlap_end = usize::MAX;
-        
+        let mut erase_lbs = vec![];
         list.sort_by(|a, b| {
             match a.begin.cmp(&b.begin) {
                 Ordering::Equal => b.end.cmp(&a.end),
@@ -280,21 +289,24 @@ impl ObjectStack {
                         overlap_start = i;
                     }
                     overlap_end = i+1;
-                    println!("1");
                 },
                 _ => {
                     retain_list.push(list[i].clone());
-                    println!("2");
                     if overlap_start != usize::MAX && overlap_end != usize::MAX {
                         if list[overlap_start].cntr > list[overlap_end].cntr {
                             retain_list.push(list[overlap_start].clone());
+                            for i in overlap_start+1 .. overlap_end+1 {
+                                erase_lbs.push(list[i].lb);
+                            } 
                         }
                         else {
                             retain_list.push(list[overlap_end].clone());
+                            for i in overlap_start .. overlap_end {
+                                erase_lbs.push(list[i].lb);
+                            }
                         }
                         overlap_start = usize::MAX;
                         overlap_end = usize::MAX;
-                        println!("3");
                     }
                 }
             };
@@ -302,18 +314,22 @@ impl ObjectStack {
 
         if overlap_start == usize::MAX && overlap_end == usize::MAX {
             retain_list.push(list[list.len()-1].clone());
-            println!("4");
         }
         else {
             if list[overlap_start].cntr > list[overlap_end].cntr {
                 retain_list.push(list[overlap_start].clone());
+                for i in overlap_start+1 .. overlap_end+1 {
+                    erase_lbs.push(list[i].lb);
+                } 
             }
             else {
                 retain_list.push(list[overlap_end].clone());
+                for i in overlap_start .. overlap_end {
+                    erase_lbs.push(list[i].lb);
+                }
             }
-            println!("5");
         }
-        println!("after handle_overlap : {:?}", retain_list);
+        loop_handlers::ObjectStack::erase_lb_wrapper(&erase_lbs);
         list.clear();
         list.append(&mut retain_list);
         
@@ -332,7 +348,7 @@ impl ObjectStack {
                 other => other,
             }
         });
-        println!("vec to minimize: {:?}", list);
+        // println!("vec to minimize: {:?}", list);
         let mut new_list = vec![];
         let none_ts = TaintSeg{
             lb: 0,
@@ -392,12 +408,8 @@ impl ObjectStack {
                     },
                     SegRelation::RightOverlap => {
                         if cur_ts.son.is_none() && list[i].son.is_none() {
-                            println!("two none");
-                            println!("overlap1: {:?}\noverlap2: {:?}",cur_ts, list[i]);
-                            //保留最后access的那个
-                            //不能一个一个地插，否则还得改树
-
-
+                            //the funtion handle_overlap has filterd out this situation
+                            println!("please check function: handle_overlap");
                         }
                         if loop_handlers::ObjectStack::access_check(cur_ts.lb as u64, 0) == 0 {
                             // lb comes from hash_combine
@@ -414,8 +426,6 @@ impl ObjectStack {
                         }
                         else {
                         }
-                        //overlap的部分切开分为两个
-                        //怎么处理呢，必须处理，否则缺东西
                         
                     },
                     SegRelation::Disjoint => {
@@ -648,39 +658,45 @@ impl ObjectStack {
         s.push_str(&format!("{}\"{}\": {},\n",blank2, end, ttsg.end - father_begin));     //    "end": 8,
         let ttsg_sons = ttsg.son.as_ref().unwrap();
         s.push_str(&format!("{}\"{}\": {{\n",blank2, str_son)); 
-        let mut has_last = true;
-        let mut fake_last_seg = TaintSeg{
+        let mut fake_seg = TaintSeg{
             lb: 0,
             begin: 0,
             end: 0,
             son: None,
             cntr: u32::MAX,
         };
-        //complete tail
-        if ttsg.end != ttsg_sons[ttsg_sons.len() - 1].end {
-            has_last = false;
-            let mut rng = rand::thread_rng();
-            let lb = rng.gen_range(0..0x10000000)+0x10000000;
-            fake_last_seg.lb = lb;
-            fake_last_seg.begin = ttsg_sons[ttsg_sons.len() - 1].end;
-            fake_last_seg.end = ttsg.end;
-        }
+        let mut rng = rand::thread_rng();
         for i in 0 .. ttsg_sons.len() {
-        // for (&i_sum, &i_son) in &label.sum.iter().zip(&label.son.iter()) {
+            if i == 0 {
+                if ttsg_sons[0].begin != ttsg.begin {
+                    fake_seg.lb = rng.gen_range(0..0x10000000)+0x10000000;
+                    fake_seg.begin = ttsg.begin;
+                    fake_seg.end = ttsg_sons[0].begin;
+                    loop_handlers::ObjectStack::output_format(s, &fake_seg.clone(), depth+1, false, ttsg.begin);
+                }
+            }
+            else if ttsg_sons[i-1].end != ttsg_sons[i].begin {
+                fake_seg.lb = rng.gen_range(0..0x10000000)+0x10000000;
+                fake_seg.begin = ttsg_sons[i-1].end;
+                fake_seg.end = ttsg_sons[i].begin;
+                loop_handlers::ObjectStack::output_format(s, &fake_seg.clone(), depth+1, false, ttsg.begin);
+            }
             if i == ttsg_sons.len() - 1 {
-                if has_last {
-                    loop_handlers::ObjectStack::output_format(s, &ttsg_sons[i], depth+1, true, ttsg.begin);
+                if ttsg.end != ttsg_sons[i].end {
+                    fake_seg.lb = rng.gen_range(0..0x10000000)+0x10000000;
+                    fake_seg.begin = ttsg_sons[ttsg_sons.len() - 1].end;
+                    fake_seg.end = ttsg.end;
+                    loop_handlers::ObjectStack::output_format(s, &ttsg_sons[i], depth+1, false, ttsg.begin);
+                    loop_handlers::ObjectStack::output_format(s, &fake_seg.clone(), depth+1, true, ttsg.begin);
                 }
                 else {
-                    loop_handlers::ObjectStack::output_format(s, &ttsg_sons[i], depth+1, false, ttsg.begin);
-                    loop_handlers::ObjectStack::output_format(s, &fake_last_seg, depth+1, true, ttsg.begin);
+                    loop_handlers::ObjectStack::output_format(s, &ttsg_sons[i], depth+1, true, ttsg.begin);
                 }
             }
             else {
                 loop_handlers::ObjectStack::output_format(s, &ttsg_sons[i], depth+1, false, ttsg.begin);
-                
-                
             }
+            
             // s.push_str(&format!("{}}},\n",blank));
         }
         s.push_str(&format!("{}}}\n",blank2));
