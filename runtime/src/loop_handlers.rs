@@ -158,50 +158,70 @@ impl ObjectStack {
         node: TaintSeg,
     ) {
         if let Some(ref mut son) = ancestor.son {
-            for i in 0 .. son.len() {
+            // println!("insert_node ancestor: ");
+            // println!("top lb: {:016X}, begin: {}, end:{}", ancestor.lb, ancestor.begin, ancestor.end);
+            // for i in son.clone() {
+            //     println!("son lb: {:016X}, begin: {}, end:{}, son_is_none: {}", i.lb, i.begin, i.end, i.son.is_none());
+            // }
+            let son_len = son.len();
+            // return when match
+            for i in 0 .. son_len {
                 match loop_handlers::ObjectStack::seg_relation(&son[i], &node) {
                     SegRelation::Father => {
+                        // println!("insert_node Father: son[i]: {{lb: {:016X}, begin: {}, end:{}, son_is_none: {}}}, node: {{lb: {:016X}, begin: {}, end:{}, son_is_none: {}}}", son[i].lb, son[i].begin, son[i].end, son[i].son.is_none(), node.lb, node.begin, node.end, node.son.is_none());
                         loop_handlers::ObjectStack::insert_node(&mut son[i], node);
                         return;
                     },
                     SegRelation::Same => {
+                        // println!("insert_node Same: son[i]: {{lb: {:016X}, begin: {}, end:{}, son_is_none: {}}}, node: {{lb: {:016X}, begin: {}, end:{}, son_is_none: {}}}", son[i].lb, son[i].begin, son[i].end, son[i].son.is_none(), node.lb, node.begin, node.end, node.son.is_none());
                         son[i].lb = min(son[i].lb, node.lb);
-                        if ! node.son.is_none() {
-                            let tmp = node.clone().son.unwrap();
-                            for son_i in tmp {
+                        if let Some(node_son) = node.son {
+                            for son_i in node_son {
                                 loop_handlers::ObjectStack::insert_node(&mut son[i], son_i);
                             }
                         }
                         return;
                     },
-                    SegRelation::Son => {
-                        let mut tmp = son.clone();
-                        tmp.push(node);
-                        loop_handlers::ObjectStack::construct_tree(&mut tmp);
-                        if tmp.len() == 1 {
-                            son.clear();
-                            son.append(&mut tmp[0].son.clone().unwrap());
-                        }
-                        return;
-                    },
-                    SegRelation::RightOverlap => {
-                        if loop_handlers::ObjectStack::access_check(son[i].lb as u64, 0) == 0 {
-                            son[i].end = node.end;
-                            loop_handlers::ObjectStack::insert_node(&mut son[i], node.clone());
-                            son[i].lb = hash_combine(son[i].son.as_ref().unwrap());
-                        }
-                        return;
-                    }
                     _ => {},
-                } 
-            }
-            son.push(node); //未排除son之间overlap情况
-            son.sort_by(|a, b| {
-                match a.begin.cmp(&b.begin) {
-                    Ordering::Equal => b.end.cmp(&a.end),
-                    other => other,
                 }
-            });
+            }
+            let mut overlap_start = usize::MAX;
+            let mut overlap_end = 0;
+            for i in 0 .. son_len {
+                match loop_handlers::ObjectStack::seg_relation(&son[i], &node) {
+                    SegRelation::Son | SegRelation::RightOverlap | SegRelation::LeftOverlap => {
+                        overlap_start = min(overlap_start, i);
+                        overlap_end = max(overlap_end, i);
+                    },
+                    _ => {}
+                }
+            }
+            if overlap_start == usize::MAX && overlap_end == 0 {
+                son.push(node); 
+                son.sort_by(|a, b| {
+                    match a.begin.cmp(&b.begin) {
+                        Ordering::Equal => b.end.cmp(&a.end),
+                        other => other,
+                    }
+                });
+            }
+            else {
+                let overlap_length = overlap_end - overlap_start + 1;
+                let mut overlap_vec = vec![];
+                for _i in 0 .. overlap_length {
+                    overlap_vec.push(son.remove(overlap_start));
+                }
+                overlap_vec.push(node);
+                loop_handlers::ObjectStack::construct_tree(&mut overlap_vec);
+                son.append(&mut overlap_vec);
+                son.sort_by(|a, b| {
+                    match a.begin.cmp(&b.begin) {
+                        Ordering::Equal => b.end.cmp(&a.end),
+                        other => other,
+                    }
+                });
+            }
+            return;
         }
         else {
             ancestor.son = Some(vec![node]);
@@ -249,6 +269,7 @@ impl ObjectStack {
             }
         }
     }
+
     pub fn handle_overlap (
         list : &mut Vec<TaintSeg>,
     ) {
@@ -332,7 +353,6 @@ impl ObjectStack {
         loop_handlers::ObjectStack::erase_lb_wrapper(&erase_lbs);
         list.clear();
         list.append(&mut retain_list);
-        
     }
 
     pub fn construct_tree(
@@ -348,7 +368,10 @@ impl ObjectStack {
                 other => other,
             }
         });
-        // println!("vec to minimize: {:?}", list);
+        // println!("vec to minimize: ");
+        // for i in list.clone() {
+        //     println!("lb: {:016X}, begin: {}, end:{}, son_is_none: {}", i.lb, i.begin, i.end, i.son.is_none());
+        // }
         let mut new_list = vec![];
         let none_ts = TaintSeg{
             lb: 0,
@@ -374,14 +397,17 @@ impl ObjectStack {
                         }
                     },
                     SegRelation::Father => {
+                        // println!("Father: cur_ts: {{lb: {:016X}, begin: {}, end:{}, son_is_none: {}}}, list[i]: {{lb: {:016X}, begin: {}, end:{}, son_is_none: {}}}", cur_ts.lb, cur_ts.begin, cur_ts.end, cur_ts.son.is_none(), list[i].lb, list[i].begin, list[i].end, list[i].son.is_none());
                         loop_handlers::ObjectStack::insert_node(&mut cur_ts, list[i].clone())
                     },
                     SegRelation::Son => {
+                        // println!("Son: cur_ts: {{lb: {:016X}, begin: {}, end:{}, son_is_none: {}}}, list[i]: {{lb: {:016X}, begin: {}, end:{}, son_is_none: {}}}", cur_ts.lb, cur_ts.begin, cur_ts.end, cur_ts.son.is_none(), list[i].lb, list[i].begin, list[i].end, list[i].son.is_none());
                         let prev_ts = cur_ts;
                         cur_ts = list[i].clone();
                         loop_handlers::ObjectStack::insert_node(&mut cur_ts, prev_ts);
                     },
                     SegRelation::RightConnect => {
+                        // println!("RightConnect: cur_ts: {{lb: {:016X}, begin: {}, end:{}, son_is_none: {}}}, list[i]: {{lb: {:016X}, begin: {}, end:{}, son_is_none: {}}}", cur_ts.lb, cur_ts.begin, cur_ts.end, cur_ts.son.is_none(), list[i].lb, list[i].begin, list[i].end, list[i].son.is_none());
                         if loop_handlers::ObjectStack::access_check(cur_ts.lb as u64, 0) != 0 {
                             let prev_ts = cur_ts.clone();
                             cur_ts = none_ts.clone();
@@ -407,6 +433,7 @@ impl ObjectStack {
                         }
                     },
                     SegRelation::RightOverlap => {
+                        // println!("RightOverlap: cur_ts: {{lb: {:016X}, begin: {}, end:{}, son_is_none: {}}}, list[i]: {{lb: {:016X}, begin: {}, end:{}, son_is_none: {}}}", cur_ts.lb, cur_ts.begin, cur_ts.end, cur_ts.son.is_none(), list[i].lb, list[i].begin, list[i].end, list[i].son.is_none());
                         if cur_ts.son.is_none() && list[i].son.is_none() {
                             //the funtion handle_overlap has filterd out this situation
                             println!("please check function: handle_overlap");
@@ -425,10 +452,12 @@ impl ObjectStack {
                             cur_ts.lb = hash_combine(cur_ts.son.as_ref().unwrap());
                         }
                         else {
+                            println!("please check function: handle_overlap");
                         }
                         
                     },
                     SegRelation::Disjoint => {
+                        // println!("Disjoint: cur_ts: {{lb: {:016X}, begin: {}, end:{}, son_is_none: {}}}, list[i]: {{lb: {:016X}, begin: {}, end:{}, son_is_none: {}}}", cur_ts.lb, cur_ts.begin, cur_ts.end, cur_ts.son.is_none(), list[i].lb, list[i].begin, list[i].end, list[i].son.is_none());
                         new_list.push(cur_ts);
                         cur_ts = list[i].clone();
                     },
@@ -441,6 +470,15 @@ impl ObjectStack {
         }
         list.clear();
         list.append(&mut new_list);
+        // println!("minimized: ");
+        // for i in list.clone() {
+        //     println!("top lb: {:016X}, begin: {}, end:{}, son_is_none: {}", i.lb, i.begin, i.end, i.son.is_none());
+        //     if let Some(son) = i.clone().son {
+        //         for j in son.clone() {
+        //             println!("son lb: {:016X}, begin: {}, end:{}, son_is_none: {}", j.lb, j.begin, j.end, j.son.is_none());
+        //         }   
+        //     }
+        // }
     }
 
     // if size == 0 ,search lb in LC, return 0 if not found
@@ -635,6 +673,7 @@ impl ObjectStack {
         is_last: bool,
         father_begin: u32,
     ){
+        // let father_begin = 0;
         let blank = "  ".repeat(depth);
         let blank2 = "  ".repeat(depth+1);
         let start = "start";
@@ -667,29 +706,33 @@ impl ObjectStack {
         };
         let mut rng = rand::thread_rng();
         for i in 0 .. ttsg_sons.len() {
+            // /* 
             if i == 0 {
                 if ttsg_sons[0].begin != ttsg.begin {
-                    fake_seg.lb = rng.gen_range(0..0x10000000)+0x10000000;
+                    fake_seg.lb = rng.gen_range(0..0x10000000)+0x100000000;
                     fake_seg.begin = ttsg.begin;
                     fake_seg.end = ttsg_sons[0].begin;
                     loop_handlers::ObjectStack::output_format(s, &fake_seg.clone(), depth+1, false, ttsg.begin);
                 }
             }
-            else if ttsg_sons[i-1].end != ttsg_sons[i].begin {
-                fake_seg.lb = rng.gen_range(0..0x10000000)+0x10000000;
+            else if ttsg_sons[i-1].end < ttsg_sons[i].begin && ttsg_sons[i-1].end != ttsg_sons[i].begin {
+                fake_seg.lb = rng.gen_range(0..0x10000000)+0x200000000;
                 fake_seg.begin = ttsg_sons[i-1].end;
                 fake_seg.end = ttsg_sons[i].begin;
                 loop_handlers::ObjectStack::output_format(s, &fake_seg.clone(), depth+1, false, ttsg.begin);
             }
+            // */
             if i == ttsg_sons.len() - 1 {
+                // /* 
                 if ttsg.end != ttsg_sons[i].end {
-                    fake_seg.lb = rng.gen_range(0..0x10000000)+0x10000000;
+                    fake_seg.lb = rng.gen_range(0..0x10000000)+0x30000000;
                     fake_seg.begin = ttsg_sons[ttsg_sons.len() - 1].end;
                     fake_seg.end = ttsg.end;
                     loop_handlers::ObjectStack::output_format(s, &ttsg_sons[i], depth+1, false, ttsg.begin);
                     loop_handlers::ObjectStack::output_format(s, &fake_seg.clone(), depth+1, true, ttsg.begin);
                 }
                 else {
+                    // */
                     loop_handlers::ObjectStack::output_format(s, &ttsg_sons[i], depth+1, true, ttsg.begin);
                 }
             }
@@ -726,25 +769,6 @@ impl ObjectStack {
         self.fd = Some(json_file);
     }
 
-    fn patch_up(
-        &mut self,
-    ) {
-        let origin_length = self.objs[self.cur_id].sum.len();
-        let mut rng = rand::thread_rng();
-        for i in 0 .. origin_length - 1 {
-            if self.objs[self.cur_id].sum[i].end < self.objs[self.cur_id].sum[i+1].begin {
-                let fake_ttsg = TaintSeg{
-                    lb: rng.gen_range(0..0x10000000)+0x20000000,
-                    begin: self.objs[self.cur_id].sum[i].end,
-                    end: self.objs[self.cur_id].sum[i+1].begin,
-                    son: None,
-                    cntr: u32::MAX,
-                };
-                self.objs[self.cur_id].sum.push(fake_ttsg);
-            }
-        }
-    }
-
     pub fn fini(
         &mut self,
     ) {
@@ -752,12 +776,20 @@ impl ObjectStack {
         while self.cur_id != 0 {
             self.pop_obj(0);
         }
-        //complete vacancies chunk
-        if self.objs[self.cur_id].sum.len() > 1 {
-            self.patch_up();
-        }
         let mut s = String::new();
         loop_handlers::ObjectStack::construct_tree(&mut self.objs[self.cur_id].sum);
+        if self.objs[self.cur_id].sum.len() > 1 {
+            let sum_clone = self.objs[self.cur_id].sum.clone();
+            let sum_len = sum_clone.len();
+            let new_sum = TaintSeg{
+                lb: rand::thread_rng().gen_range(0..0x10000000)+0x400000000,
+                begin: sum_clone[0].begin, 
+                end: sum_clone[sum_len - 1].end,
+                son: Some(sum_clone),
+                cntr: self.access_counter,
+            };
+            self.objs[self.cur_id].sum = vec![new_sum];
+        }
         s.push_str(&format!("{{\n"));
         for i in &self.objs[self.cur_id].sum {
             if &i == &self.objs[self.cur_id].sum.last().unwrap() {
