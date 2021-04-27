@@ -454,6 +454,14 @@ impl ObjectStack {
                         else {
                             println!("please check function: handle_overlap");
                         }
+
+                        if cur_ts.son.is_some() {
+                            let son_len = cur_ts.son.clone().unwrap().len();
+                            if son_len == 1 {
+                                let son_clone = cur_ts.son.unwrap();
+                                cur_ts.son = son_clone[0].son.clone();
+                            }
+                        }
                         
                     },
                     SegRelation::Disjoint => {
