@@ -21,17 +21,19 @@ CC=gclang CXX=gclang++ CFLAGS="-O0 -g -fno-discard-value-names" cmake -G "Unix M
 ```
 
 ## ffmpeg
+### !! Do not use gclang
 ```
-./configure --cc=gclang --cxx=gclang++ --extra-cflags='-O0 -g -fembed-bitcode -fno-discard-value-names -fPIE' --extra-cxxflags='-O0 -g -fembed-bitcode -fno-discard-value-names -fPIE' --prefix={$PREFIX} --disable-runtime-cpudetect --disable-optimizations --disable-mmx --disable-mmxext --disable-sse --disable-sse2 --disable-sse3 --disable-ssse3 --disable-sse4 --disable-sse42 --disable-avx --disable-avx2 --disable-avx512 --disable-stripping --disable-autodetect --disable-doc --disable-pthreads --disable-w32threads --disable-os2threads --disable-network
+./configure --cc={$ROOT_DIR}/chunk-fuzzer-pass/install/test-clang --cxx={$ROOT_DIR}/chunk-fuzzer-pass/install/test-clang++ --extra-cflags='-O0 -g -fno-discard-value-names -fPIE' --extra-cxxflags='-O0 -g -fno-discard-value-names -fPIE' --prefix={$PREFIX} --disable-runtime-cpudetect --disable-optimizations --disable-mmx --disable-mmxext --disable-sse --disable-sse2 --disable-sse3 --disable-ssse3 --disable-sse4 --disable-sse42 --disable-avx --disable-avx2 --disable-avx512 --disable-stripping --disable-autodetect --disable-doc --disable-pthreads --disable-w32threads --disable-os2threads --disable-network
 
-USE_ZLIB=1 test-clang ffmpeg.bc -o ffmpeg-loop.out
+make -j$(nproc)
 ```
 
 ## libav
+### !! Do not use gclang
 ```
-./configure --cc=gclang --extra-cflags='-O0 -g -fembed-bitcode -fno-discard-value-names' --prefix={$PREFIX} --disable-doc --disable-pthreads --disable-w32threads --disable-network --disable-bzlib --disable-gnutls --disable-openssl --disable-zlib --disable-mmx --disable-mmxext --disable-sse --disable-sse2 --disable-sse3 --disable-ssse3 --disable-sse4 --disable-sse42 --disable-avx --disable-avx2 --disable-yasm
+./configure --cc={$ROOT_DIR}/chunk-fuzzer-pass/install/test-clang --extra-cflags='-O0 -g -fno-discard-value-names' --prefix={$PREFIX} --disable-doc --disable-pthreads --disable-w32threads --disable-network --disable-bzlib --disable-gnutls --disable-openssl --disable-zlib --disable-mmx --disable-mmxext --disable-sse --disable-sse2 --disable-sse3 --disable-ssse3 --disable-sse4 --disable-sse42 --disable-avx --disable-avx2 --disable-yasm
 
-USE_ZLIB=1 test-clang avconv.bc -o avconv-loop.out
+make -j$(nproc)
 ```
 
 ## wavpack
@@ -40,8 +42,9 @@ CC=gclang CXX=gclang++ CFLAGS="-O0 -g -fno-discard-value-names" ./configure --di
 ```
 
 ## PoDofo
-
-first , disable some external library in CmakeLists.txt
+### !! Do not use gclang
+### dependency: libfreetype.
+First , disable some external library in CmakeLists.txt
 |line number|content|
 |-----------|-------|
 |327 |#FIND_PACKAGE(LIBCRYPTO) 
@@ -55,7 +58,6 @@ first , disable some external library in CmakeLists.txt
 |280 |#SET(WANT_FONTCONFIG TRUE CACHE INTERNAL
 |281 |#"True if PoDoFo should be built with fontconfig support")
 <br/>
-### !! Do not use gclang
 ```
 mkdir build
 
@@ -70,5 +72,5 @@ CC={$ROOT_DIR}/chunk-fuzzer-pass/install/test-clang CXX={$ROOT_DIR}chunk-fuzzer-
 
 export ANGORA_TAINT_RULE_LIST={$YOUR_PATH}/podofo_abilist.txt
 
-USE_ZLIB=1 make -j4
+USE_ZLIB=1 make make -j$(nproc)
 ```
