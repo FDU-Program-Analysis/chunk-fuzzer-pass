@@ -301,7 +301,7 @@ pub extern "C" fn __chunk_trace_switch_tt(
 
 #[no_mangle]
 pub extern "C" fn __dfsw___chunk_trace_switch_tt(
-    _size: u32,
+    size: u32,
     _condition: u64,
     num: u32,
     args: *mut u64,
@@ -314,19 +314,22 @@ pub extern "C" fn __dfsw___chunk_trace_switch_tt(
     if lb == 0 {
         return;
     }
-    let mut size = 0;
+    let mut real_size = 0;
 
     // let mut op = defs::COND_ICMP_EQ_OP;
     let sw_args = unsafe { slice::from_raw_parts(args, num as usize) }.to_vec();
     let mut osl = OS.lock().unwrap();
     if let Some(ref mut os) = *osl {
-        size = os.get_load_label(lb);
+        real_size = os.get_load_label(lb);
+        if real_size > size {
+            real_size = size;
+        }
     }
     for arg in sw_args {
         let vec8 = arg.to_le_bytes().to_vec();
-        let slice_vec8 = &vec8[..size as usize];
+        let slice_vec8 = &vec8[..real_size as usize]; // wrong
         let vec8 = slice_vec8.to_vec();
-        log_enum(size, lb as u64, vec8.clone());
+        log_enum(real_size, lb as u64, vec8.clone());
     }
 }
 

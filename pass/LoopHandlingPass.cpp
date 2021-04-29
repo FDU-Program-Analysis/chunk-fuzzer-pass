@@ -556,7 +556,6 @@ void LoopHandlingPass::visitSwitchInst(Module &M, Instruction *Inst) {
     ArgList.push_back(ConstantExpr::getCast(CastInst::ZExt, C, Int64Ty));
   }
 
-  // need to fix
   ArrayType *ArrayOfInt64Ty = ArrayType::get(Int64Ty, ArgList.size());
   GlobalVariable *ArgGV = new GlobalVariable( 
       M, ArrayOfInt64Ty, false, GlobalVariable::InternalLinkage,

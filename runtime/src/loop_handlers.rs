@@ -8,7 +8,7 @@ use std::{
     io::prelude::*, 
     cmp::*, 
     sync::Mutex, 
-    // time::*,
+    time::*,
     path:: PathBuf,
 };
 use std::collections::HashMap;
@@ -434,10 +434,7 @@ impl ObjectStack {
                     },
                     SegRelation::RightOverlap => {
                         // println!("RightOverlap: cur_ts: {{lb: {:016X}, begin: {}, end:{}, son_is_none: {}}}, list[i]: {{lb: {:016X}, begin: {}, end:{}, son_is_none: {}}}", cur_ts.lb, cur_ts.begin, cur_ts.end, cur_ts.son.is_none(), list[i].lb, list[i].begin, list[i].end, list[i].son.is_none());
-                        if cur_ts.son.is_none() && list[i].son.is_none() {
-                            //the funtion handle_overlap has filterd out this situation
-                            println!("please check function: handle_overlap");
-                        }
+                        
                         if loop_handlers::ObjectStack::access_check(cur_ts.lb as u64, 0) == 0 {
                             // lb comes from hash_combine
                             cur_ts.end = list[i].end;
@@ -451,8 +448,14 @@ impl ObjectStack {
                             loop_handlers::ObjectStack::insert_node(&mut cur_ts, prev_ts);
                             cur_ts.lb = hash_combine(cur_ts.son.as_ref().unwrap());
                         }
+                        else if cur_ts.son.is_none() && list[i].son.is_none() {
+                            //the funtion handle_overlap has filterd out this situation
+                            // println!("RightOverlap two none: cur_ts: {{lb: {:016X}, begin: {}, end:{}}}, list[i]: {{lb: {:016X}, begin: {}, end:{}}}", cur_ts.lb, cur_ts.begin, cur_ts.end, list[i].lb, list[i].begin, list[i].end);
+                            // println!("please check function: handle_overlap");
+                        }
                         else {
-                            println!("please check function: handle_overlap");
+                            // println!("RightOverlap else: cur_ts: {{lb: {:016X}, begin: {}, end:{}}}, list[i]: {{lb: {:016X}, begin: {}, end:{}}}", cur_ts.lb, cur_ts.begin, cur_ts.end, list[i].lb, list[i].begin, list[i].end);
+                            // println!("please check function: handle_overlap");
                         }
 
                         if cur_ts.son.is_some() {
@@ -809,22 +812,24 @@ impl ObjectStack {
         }
         s.push_str(&format!("}}\n"));
 
-        // if self.file_name.len() == 0 {
-        //     let timestamp = {
-        //         let start = SystemTime::now();
-        //         let since_the_epoch = start
-        //             .duration_since(UNIX_EPOCH)
-        //             .expect("Time went backwards");
-        //         let ms = since_the_epoch.as_secs() as i64 * 1000i64 + (since_the_epoch.subsec_nanos() as f64 / 1_000_000.0) as i64;
-        //         ms
-        //     };
-        //     self.file_name.push_str("logfile_");
-        //     self.file_name.push_str(&timestamp.to_string());
-        //     self.file_name.push_str(".json");
-        // }
-        // let mut fd = File::create(&self.file_name).expect("Unable to create log file");
+        
         if self.fd.is_some() {
             self.fd.as_ref().unwrap().write_all(s.as_bytes()).expect("Unable to write file");
+        }
+        else {
+            let timestamp = {
+                let start = SystemTime::now();
+                let since_the_epoch = start
+                    .duration_since(UNIX_EPOCH)
+                    .expect("Time went backwards");
+                let ms = since_the_epoch.as_secs() as i64 * 1000i64 + (since_the_epoch.subsec_nanos() as f64 / 1_000_000.0) as i64;
+                ms
+            };
+            let mut json_name = "logfile_".to_string();
+            json_name += &timestamp.to_string();
+            json_name += &".json".to_string();
+            let mut json_file = File::create(json_name).expect("Unable to create log file");
+            json_file.write_all(s.as_bytes()).expect("Unable to write file");
         }
     }
 }
