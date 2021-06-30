@@ -20,6 +20,11 @@ USE_ZLIB=1 test-clang pngpixel.bc -o pngpixel-loop.out
 CC=gclang CXX=gclang++ CFLAGS="-O0 -g -fno-discard-value-names" cmake -G "Unix Makefiles" -B$YOUR_PATH/build-clang   -DCMAKE_INSTALL_PREFIX={$PREFIX} -DJAS_ENABLE_SHARED=false
 ```
 
+## openJPEG
+
+```
+CC=gclang CXX=gclang++ cmake -G "Unix Makefiles" -DCMAKE_BUILD_TYPE:string="Release" -DBUILD_SHARED_LIBS:BOOL=OFF -DCMAKE_INSTALL_PREFIX:path="$YOUR_PATH" ..
+```
 ## ffmpeg
 ### !! Do not use gclang
 ```
@@ -74,3 +79,31 @@ export ANGORA_TAINT_RULE_LIST={$YOUR_PATH}/podofo_abilist.txt
 
 USE_ZLIB=1 make make -j$(nproc)
 ```
+
+## libpcap & tcpdump
+```
+cd libpcap-1.10.0
+CC=gclang CXX=gclang++ CFLAGS="-O0 -g -fno-discard-value-names" ./configure  --disable-shared --prefix={$YOUR_PATH}
+CC=gclang CXX=gclang++ make
+
+cd ../libpcap-1.10.0
+CC=gclang CXX=gclang++ CFLAGS="-O0 -g -fno-discard-value-names" ./configure --enable-shared=no --prefix=/home/jordan/tests/target-clang-install
+CC=gclang CXX=gclang++ make
+
+### runtime parameters
+tcpdump --dont-verify-checksums -nr @@
+
+```
+
+## ogg & vorbis
+cd ogg
+CC=gclang CXX=gclang++ CFLAGS="-O0 -g -fno-discard-value-names" ./configure --enable-shared=no --prefix=/home/jordan/tests/target-clang-install
+(--disable-crc)
+make
+
+
+cd ../vorbis
+CC=gclang CXX=gclang++ CFLAGS="-O0 -g -fno-discard-value-names" ./configure --enable-shared=no --prefix=/home/jordan/tests/target-clang-install
+make
+cd examples
+CC=gclang CXX=gclang++ CFLAGS="-O0 -g -fno-discard-value-names" make
