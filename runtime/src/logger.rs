@@ -4,6 +4,7 @@ use std::{
     fs::File, 
     io::prelude::*,
     path::PathBuf,
+    time::*,
 };
 
 // use crate::{len_label, tag_set_wrap};
@@ -177,10 +178,25 @@ impl Logger {
     fn fini(&mut self) {
 
         self.enums_clean();
-        if self.fd.is_some() {
-            let mut s = String::new();
+        let mut s = String::new();
             self.output_logs(&mut s); 
+        if self.fd.is_some() {
             self.fd.as_ref().unwrap().write_all(s.as_bytes()).expect("Unable to write file");
+        }
+        else {
+            let timestamp = {
+                let start = SystemTime::now();
+                let since_the_epoch = start
+                    .duration_since(UNIX_EPOCH)
+                    .expect("Time went backwards");
+                let ms = since_the_epoch.as_secs() as i64 * 1000i64 + (since_the_epoch.subsec_nanos() as f64 / 1_000_000.0) as i64;
+                ms
+            };
+            let mut track_name = "logfile_".to_string();
+            track_name += &timestamp.to_string();
+            track_name += &".track".to_string();
+            let mut track_file = File::create(track_name).expect("Unable to create log file");
+            track_file.write_all(s.as_bytes()).expect("Unable to write file");
         }
     }
 }
