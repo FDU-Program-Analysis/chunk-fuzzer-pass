@@ -65,10 +65,14 @@ ninja cxx cxxabi
 cd ..
 mkdir build_track && cd build_track/
 
+sudo apt install libc++-10-dev libc++abi-10-dev
 USE_FAST=1 CC=${ROOT_DIR}/install/test-clang CXX=${ROOT_DIR}/install/test-clang++ cmake -G Ninja ../llvm_src  -DLIBCXXABI_ENABLE_SHARED=NO -DLIBCXX_ENABLE_SHARED=NO -DLIBCXX_CXX_ABI=libcxxabi 
 #-DLLVM_FORCE_USE_OLD_TOOLCHAIN=YES 
 USE_DFSAN=1 ninja cxx cxxabi
 
 # @echo "if cxxabi.h not found, try: cp ./libcxxabi/include/*  ./libcxx/include, or -I"
+
+# @echo "if libstdc++ version must be at least 5.1, try: sudo apt install libc++-10-dev libc++abi-10-dev"
+
 
 @echo "Please install them again to overwrite old ones (by CMake).
