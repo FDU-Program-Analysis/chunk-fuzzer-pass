@@ -38,6 +38,7 @@ dst_label: 19
 void foo() {
     for(int i = 0; i < 10; ++i)
         printf("%d",i);
+	printf("\n");
 }
 
 int main()

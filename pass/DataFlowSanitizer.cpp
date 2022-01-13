@@ -780,7 +780,7 @@ bool DataFlowSanitizer::runOnModule(Module &M) {
                          Attribute::NoUnwind);
     AL = AL.addAttribute(M.getContext(), AttributeList::FunctionIndex,
                          Attribute::ReadNone);
-    AL = AL.addParamAttribute(M.getContext(), 0, Attribute::ZExt);                  
+    // AL = AL.addParamAttribute(M.getContext(), 0, Attribute::ZExt);                  
     DFSanCombineAndFn =
       Mod->getOrInsertFunction("dfsan_combine_and_ins", DFSanCombineAndFnTy, AL);
   }

@@ -161,7 +161,7 @@ struct LoopHandlingPass : public ModulePass {
 
 
   LoopHandlingPass() : ModulePass(ID) {}
-  bool runOnModule(Module &M) ;
+  bool runOnModule(Module &M);
 
   //user defined functions
   u32 getRandomNum();
@@ -395,7 +395,7 @@ void LoopHandlingPass::initVariables(Module &M) {
     ChunkOffsFnTT = M.getOrInsertFunction("__chunk_trace_offsfn_tt", ChunkOffsFnTtTy, AL);   
   }
   
-  Type *ChunkLenFnTtArgs[4] = {Int8PtrTy, Int32Ty, Int32Ty, Int32Ty};
+  Type *ChunkLenFnTtArgs[4] = {Int8PtrTy, Int64Ty, Int32Ty, Int64Ty};
   ChunkLenFnTtTy = FunctionType::get(VoidTy, ChunkLenFnTtArgs, false);
   {
     AttributeList AL;
@@ -709,7 +709,7 @@ void LoopHandlingPass::processCallInst(Instruction *Inst, u32 hFunc) {
   
   ConstantInt *HFunc = ConstantInt::get(Int32Ty, hFunc);
   IRBuilder<> BeforeBuilder(Inst);
-  CallInst *Call1 = BeforeBuilder.CreateCall(PushNewObjFn,{BoolFalse,  NumZero, HFunc});
+  CallInst *Call1 = BeforeBuilder.CreateCall(PushNewObjFn,{BoolFalse, NumZero, HFunc});
   IRBuilder<> AfterBuilder(AfterCall);
   Value *PopObjRet = AfterBuilder.CreateCall(PopObjFn, {HFunc});
 

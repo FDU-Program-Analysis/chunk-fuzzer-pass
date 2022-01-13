@@ -70,10 +70,11 @@ pub extern "C" fn __dfsw___chunk_push_new_obj(
     _l1: DfsanLabel,
     _l2: DfsanLabel,
 ) {
+    //One object for one loop
     if is_loop && loop_cnt != 0 {
         return;
     }
-    // println!("push obj :{:X}", loop_hash);
+    println!("push obj :{}", loop_hash);
     let mut osl = OS.lock().unwrap();
     if let Some(ref mut os) = *osl {
         os.new_obj(is_loop, loop_hash);
@@ -119,8 +120,9 @@ pub extern "C" fn __dfsw___chunk_pop_obj(
     // println!("pop obj :{:X}", loop_hash);
     let mut osl = OS.lock().unwrap();
     if let Some(ref mut os) = *osl {
+        println!("call pop_obj and hash is {}", loop_hash);
         os.pop_obj(loop_hash);
-        true
+         true
     } else {
         panic!("POP ERROR!");
     }
@@ -139,7 +141,7 @@ pub extern "C" fn __chunk_object_stack_fini() {
 pub extern "C" fn __chunk_set_input_file_name(){
     let input_file = match env::var("CHUNK_CURRENT_INPUT_FILE") {
         Ok(path) => {
-            // println!("CHUNK_CURRENT_INPUT_FILE: {:?}",path);
+            println!("CHUNK_CURRENT_INPUT_FILE: {:?}",path);
             PathBuf::from(path)
         },
         Err(_) => panic!("set input_name error"),
@@ -298,7 +300,6 @@ pub extern "C" fn __chunk_trace_switch_tt(
     panic!("Forbid calling __chunk_trace_switch_tt directly");
 }
 
-
 #[no_mangle]
 pub extern "C" fn __dfsw___chunk_trace_switch_tt(
     size: u32,
@@ -332,7 +333,6 @@ pub extern "C" fn __dfsw___chunk_trace_switch_tt(
         log_enum(real_size, lb as u64, vec8.clone());
     }
 }
-
 
 #[no_mangle]
 pub extern "C" fn __chunk_trace_cmpfn_tt(
@@ -400,8 +400,6 @@ pub extern "C" fn __dfsw___chunk_trace_cmpfn_tt(
     }
 }
 
-
-
 #[no_mangle]
 pub extern "C" fn __chunk_trace_offsfn_tt(
     _a: u32,
@@ -430,11 +428,10 @@ pub extern "C" fn __dfsw___chunk_trace_offsfn_tt(
 
 #[no_mangle]
 pub extern "C" fn __chunk_trace_lenfn_tt(
-    _a: u32,
-    _b: u32,
+    _a: *mut i8,
+    _b: u64,
     _c: u32,
-    _d: *mut i8,
-    _e: *mut i8
+    _d: u64
 ) {
     panic!("Forbid calling __chunk_trace_lenfn_tt directly");
 }
@@ -442,9 +439,9 @@ pub extern "C" fn __chunk_trace_lenfn_tt(
 #[no_mangle]
 pub extern "C" fn __dfsw___chunk_trace_lenfn_tt(
     dst: *mut i8,
-    _len1: u32,
+    _len1: u64,
     len2: u32,
-    ret: u32,
+    ret: u64,
     _l0: DfsanLabel,
     l1: DfsanLabel,
     l2: DfsanLabel,
@@ -457,8 +454,8 @@ pub extern "C" fn __dfsw___chunk_trace_lenfn_tt(
     let len = ret as usize;
 
     let lb = unsafe { dfsan_read_label(dst,len) };
-    // println!("lenfn_tt : {0},{1},{2},{3}", lb, len1, len2, len);
-    // println!("lables:  l0: {}, l1: {}, l2 :{}, l3: {}, ", l0, l1, l2, l3);
+    // println!("lenfn_tt : {0},{1},{2},{3}", lb, _len1, len2, len);
+    // println!("lables:  l0: {}, l1: {}, l2 :{}, l3: {}, ", _l0, l1, l2, _l3);
 
     // lb先dst后len
     if lb != 0 && l1 != 0 {
