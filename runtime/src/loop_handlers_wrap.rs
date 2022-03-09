@@ -74,7 +74,7 @@ pub extern "C" fn __dfsw___chunk_push_new_obj(
     if is_loop && loop_cnt != 0 {
         return;
     }
-    println!("push obj :{}", loop_hash);
+    //println!("push obj :{}", loop_hash);
     let mut osl = OS.lock().unwrap();
     if let Some(ref mut os) = *osl {
         os.new_obj(is_loop, loop_hash);
@@ -120,7 +120,7 @@ pub extern "C" fn __dfsw___chunk_pop_obj(
     // println!("pop obj :{:X}", loop_hash);
     let mut osl = OS.lock().unwrap();
     if let Some(ref mut os) = *osl {
-        println!("call pop_obj and hash is {}", loop_hash);
+        //println!("call pop_obj and hash is {}", loop_hash);
         os.pop_obj(loop_hash);
          true
     } else {
@@ -141,7 +141,7 @@ pub extern "C" fn __chunk_object_stack_fini() {
 pub extern "C" fn __chunk_set_input_file_name(){
     let input_file = match env::var("CHUNK_CURRENT_INPUT_FILE") {
         Ok(path) => {
-            println!("CHUNK_CURRENT_INPUT_FILE: {:?}",path);
+            //println!("CHUNK_CURRENT_INPUT_FILE: {:?}",path);
             PathBuf::from(path)
         },
         Err(_) => panic!("set input_name error"),

@@ -85,7 +85,7 @@ impl ObjectStack {
         if len < STACK_MAX {
             self.objs.push(ObjectLabels::new(is_loop, hash));
             self.cur_id += 1;
-            println!("After push cur id of the stack is {}", self.cur_id);
+            // println!("After push cur id of the stack is {}", self.cur_id);
             return;
         }
         else {
@@ -213,7 +213,7 @@ impl ObjectStack {
                     overlap_vec.push(son.remove(overlap_start));
                 }
                 overlap_vec.push(node);
-                println!("insert_node call construct_tree");
+                // println!("insert_node call construct_tree");
                 loop_handlers::ObjectStack::construct_tree(&mut overlap_vec);
                 son.append(&mut overlap_vec);
                 son.sort_by(|a, b| {
@@ -361,7 +361,7 @@ impl ObjectStack {
         mut list : &mut Vec<TaintSeg>,
     ) {
         loop_handlers::ObjectStack::handle_overlap(&mut list);
-        println!("list len = {}", list.len());
+        //println!("list len = {}", list.len());
         if list.len() <= 1 {
             return;
         }
@@ -371,10 +371,10 @@ impl ObjectStack {
                 other => other,
             }
         });
-        println!("vec to minimize: ");
-        for i in list.clone() {
-            println!("lb: {:016X}, begin: {}, end:{}, son_is_none: {}", i.lb, i.begin, i.end, i.son.is_none());
-        }
+        // println!("vec to minimize: ");
+        // for i in list.clone() {
+        //     println!("lb: {:016X}, begin: {}, end:{}, son_is_none: {}", i.lb, i.begin, i.end, i.son.is_none());
+        // }
         let mut new_list = vec![];
         let none_ts = TaintSeg{
             lb: 0,
@@ -410,13 +410,13 @@ impl ObjectStack {
                         loop_handlers::ObjectStack::insert_node(&mut cur_ts, prev_ts);
                     },
                     SegRelation::RightConnect => {
-                        println!("RightConnect: cur_ts: {{lb: {:016X}, begin: {}, end:{}, son_is_none: {}}}, list[i]: {{lb: {:016X}, begin: {}, end:{}, son_is_none: {}}}", cur_ts.lb, cur_ts.begin, cur_ts.end, cur_ts.son.is_none(), list[i].lb, list[i].begin, list[i].end, list[i].son.is_none());
+                        //println!("RightConnect: cur_ts: {{lb: {:016X}, begin: {}, end:{}, son_is_none: {}}}, list[i]: {{lb: {:016X}, begin: {}, end:{}, son_is_none: {}}}", cur_ts.lb, cur_ts.begin, cur_ts.end, cur_ts.son.is_none(), list[i].lb, list[i].begin, list[i].end, list[i].son.is_none());
                         if loop_handlers::ObjectStack::access_check(cur_ts.lb as u64, 0) != 0 {
                             let prev_ts = cur_ts.clone();
                             cur_ts = none_ts.clone();
                             cur_ts.begin = prev_ts.begin;
                             cur_ts.end = list[i].end;
-                            println!("prev_ts: {{begin: {}, end: {}, son_is_none: {}}}", prev_ts.begin, prev_ts.end, prev_ts.son.is_none());
+                            //println!("prev_ts: {{begin: {}, end: {}, son_is_none: {}}}", prev_ts.begin, prev_ts.end, prev_ts.son.is_none());
                             if let Some(ref mut son) = cur_ts.son {
                                 son.push(prev_ts);
                                 son.push(list[i].clone());
@@ -486,15 +486,15 @@ impl ObjectStack {
         list.clear();
         list.append(&mut new_list);
         loop_handlers::ObjectStack::access_check(list[0].lb, list[0].end - list[0].begin);
-        println!("minimized: ");
-        for i in list.clone() {
-            println!("top lb: {:016X}, begin: {}, end:{}, son_is_none: {}", i.lb, i.begin, i.end, i.son.is_none());
-            if let Some(son) = i.clone().son {
-                for j in son.clone() {
-                    println!("son lb: {:016X}, begin: {}, end:{}, son_is_none: {}", j.lb, j.begin, j.end, j.son.is_none());
-                }   
-            }
-        }
+        // println!("minimized: ");
+        // for i in list.clone() {
+        //     println!("top lb: {:016X}, begin: {}, end:{}, son_is_none: {}", i.lb, i.begin, i.end, i.son.is_none());
+        //     if let Some(son) = i.clone().son {
+        //         for j in son.clone() {
+        //             println!("son lb: {:016X}, begin: {}, end:{}, son_is_none: {}", j.lb, j.begin, j.end, j.son.is_none());
+        //         }   
+        //     }
+        // }
     }
 
     // if size == 0 ,search lb in LC, return 0 if not found
@@ -564,7 +564,7 @@ impl ObjectStack {
             else {
                 let tmp_iter = self.objs[self.cur_id].cur_iter.as_mut().unwrap();
                 for i in list.clone() {
-                    println!("loop insert labels");
+                    // println!("loop insert labels");
                     if tmp_iter.contains(&i) {
                         continue;
                     }
@@ -575,13 +575,13 @@ impl ObjectStack {
             }
         } else {
             for i in list.clone() {
-                println!("function insert labels");
+                // println!("function insert labels");
                 if self.objs[self.cur_id].sum.contains(&i) {
                     continue;
                 }
                 else {
                     self.objs[self.cur_id].sum.push(i);
-                    println!("After push {}", self.objs[self.cur_id].sum.len());
+                    // println!("After push {}", self.objs[self.cur_id].sum.len());
                 }
             }
         }
@@ -614,7 +614,7 @@ impl ObjectStack {
         if self.objs[self.cur_id].is_loop {
             if self.objs[self.cur_id].cur_iter.is_some() {
                 let mut tmp_iter = self.objs[self.cur_id].cur_iter.as_mut().unwrap();
-                println!("dump_cur_iter call construct_tree");
+                // println!("dump_cur_iter call construct_tree");
                 loop_handlers::ObjectStack::construct_tree(&mut tmp_iter);
                 self.insert_iter_into_sum();
                 self.objs[self.cur_id].cur_iter.as_mut().unwrap().clear();
@@ -654,7 +654,7 @@ impl ObjectStack {
             }
             else {
                 let mut list = top_obj.sum;
-                println!("hash {} pop_obj call construct_tree", hash);
+                // println!("hash {} pop_obj call construct_tree", hash);
                 loop_handlers::ObjectStack::construct_tree(&mut list);
                 if list.len() == 1 {
                 for (key,value) in &top_obj.length_candidates {
@@ -677,9 +677,9 @@ impl ObjectStack {
                 }
                 }
                 self.cur_id -= 1;
-                println!("Before insert labels, cur id of the stack is {}, cur hash is {}, list length = {}", self.cur_id, self.objs[self.cur_id].hash, self.objs[self.cur_id].sum.len());
+                //println!("Before insert labels, cur id of the stack is {}, cur hash is {}, list length = {}", self.cur_id, self.objs[self.cur_id].hash, self.objs[self.cur_id].sum.len());
                 self.insert_labels(&mut list);
-                println!("After insert labels, cur id of the stack is {}, cur hash is {}, list length = {}", self.cur_id, self.objs[self.cur_id].hash, self.objs[self.cur_id].sum.len());
+                //println!("After insert labels, cur id of the stack is {}, cur hash is {}, list length = {}", self.cur_id, self.objs[self.cur_id].hash, self.objs[self.cur_id].sum.len());
             }
         } else {
             panic!("[ERR] :STACK EMPTY! #[ERR]");
@@ -781,7 +781,7 @@ impl ObjectStack {
         if self.fd.is_some() {
             return;
         }
-        println!("json_name: {:?}", json_name);
+        //println!("json_name: {:?}", json_name);
         let json_file = match File::create(json_name) {
             Ok(a) => a,
             Err(e) => {
@@ -794,7 +794,7 @@ impl ObjectStack {
     pub fn fini(
         &mut self,
     ) {
-        println!("fini: cur_id: {}, objs:{:?}",self.cur_id,self.objs);
+        //println!("fini: cur_id: {}, objs:{:?}",self.cur_id,self.objs);
         while self.cur_id != 0 {
             if self.objs[self.cur_id].is_loop {
                 self.dump_cur_iter(0);
@@ -802,25 +802,25 @@ impl ObjectStack {
             self.pop_obj(0);
         }
         let mut s = String::new();
-        println!("Before fini call construct_tree");
-        for i in &self.objs[self.cur_id].sum{
-            println!("top lb: {:016X}, begin: {}, end:{}, son_is_none: {}", i.lb, i.begin, i.end, i.son.is_none());
-            if let Some(son) = i.clone().son {
-                for j in son.clone() {
-                    println!("son lb: {:016X}, begin: {}, end:{}, son_is_none: {}", j.lb, j.begin, j.end, j.son.is_none());
-                }   
-            }
-        }
+        //println!("Before fini call construct_tree");
+        // for i in &self.objs[self.cur_id].sum{
+        //     println!("top lb: {:016X}, begin: {}, end:{}, son_is_none: {}", i.lb, i.begin, i.end, i.son.is_none());
+        //     if let Some(son) = i.clone().son {
+        //         for j in son.clone() {
+        //             println!("son lb: {:016X}, begin: {}, end:{}, son_is_none: {}", j.lb, j.begin, j.end, j.son.is_none());
+        //         }   
+        //     }
+        // }
         loop_handlers::ObjectStack::construct_tree(&mut self.objs[self.cur_id].sum);
-        println!("After fini call construct_tree");
-        for i in &self.objs[self.cur_id].sum{
-            println!("top lb: {:016X}, begin: {}, end:{}, son_is_none: {}", i.lb, i.begin, i.end, i.son.is_none());
-            if let Some(son) = i.clone().son {
-                for j in son.clone() {
-                    println!("son lb: {:016X}, begin: {}, end:{}, son_is_none: {}", j.lb, j.begin, j.end, j.son.is_none());
-                }   
-            }
-        }
+        // println!("After fini call construct_tree");
+        // for i in &self.objs[self.cur_id].sum{
+        //     println!("top lb: {:016X}, begin: {}, end:{}, son_is_none: {}", i.lb, i.begin, i.end, i.son.is_none());
+        //     if let Some(son) = i.clone().son {
+        //         for j in son.clone() {
+        //             println!("son lb: {:016X}, begin: {}, end:{}, son_is_none: {}", j.lb, j.begin, j.end, j.son.is_none());
+        //         }   
+        //     }
+        // }
         if self.objs[self.cur_id].sum.len() > 1 {
             let sum_clone = self.objs[self.cur_id].sum.clone();
             let sum_len = sum_clone.len();
