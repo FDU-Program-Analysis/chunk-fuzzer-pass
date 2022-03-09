@@ -64,6 +64,7 @@ b
 #include <stdio.h>
 #include <stdlib.h>
 #include <unistd.h>
+#include <queue>
 
 #include "./defs.h"
 #include "./abilist.h"
@@ -145,6 +146,7 @@ struct LoopHandlingPass : public ModulePass {
   FunctionType *ChunkCmpFnTtTy;
   FunctionType *ChunkLenFnTtTy;
   FunctionType *ChunkOffsFnTtTy;
+  FunctionType *ChunkTraceBranchTtTy;
 
   FunctionCallee PrintfFn;
   FunctionCallee LoadLabelDumpFn;
@@ -158,6 +160,7 @@ struct LoopHandlingPass : public ModulePass {
   FunctionCallee ChunkLenFnTT;
   FunctionCallee ChunkOffsFnTT;
   // FunctionCallee ChunkGepTT;
+  FunctionCallee ChunkTraceBranchTT;
 
 
   LoopHandlingPass() : ModulePass(ID) {}
@@ -180,13 +183,14 @@ struct LoopHandlingPass : public ModulePass {
   void visitLoadInst(Instruction *Inst);
   void visitBranchInst(Instruction *Inst, bool loop);
   void visitSwitchInst(Module &M, Instruction *Inst);
-  void visitCmpInst(Instruction *Inst, bool loop);
+  bool visitCmpInst(Instruction *Inst, bool loop);
   void visitExploitation(Instruction *Inst);
 
-  void processCmp(Instruction *Cond, Instruction *InsertPoint, bool loop);
-  void processBoolCmp(Value *Cond, Instruction *InsertPoint,bool loop);
+  bool processCmp(Instruction *Cond, Instruction *InsertPoint, bool loop);
+  bool processBoolCmp(Value *Cond, Instruction *InsertPoint,bool loop);
   void processCallInst(Instruction *Inst, u32 hFunc);
   void processLoadInst(Instruction *Cond, Instruction *InsertPoint);
+  void processBranch(Instruction *Cond, DominatorTree &DomTree, PostDominatorTree &PostDomTree, LoopInfo &LI);
 
   void getAnalysisUsage(AnalysisUsage &AU) const override {
 
@@ -194,10 +198,12 @@ struct LoopHandlingPass : public ModulePass {
     AU.addRequired<ScalarEvolutionWrapperPass>();
     AU.addRequired<LoopInfoWrapperPass>();
     AU.addRequired<DominatorTreeWrapperPass>();
+    AU.addRequired<PostDominatorTreeWrapperPass>();
 
     AU.addPreserved<ScalarEvolutionWrapperPass>();
     AU.addPreserved<LoopInfoWrapperPass>();
     AU.addPreserved<DominatorTreeWrapperPass>();
+    AU.addPreserved<PostDominatorTreeWrapperPass>();
     AU.setPreservesAll();
   }
 };
@@ -406,6 +412,16 @@ void LoopHandlingPass::initVariables(Module &M) {
     ChunkLenFnTT = M.getOrInsertFunction("__chunk_trace_lenfn_tt", ChunkLenFnTtTy, AL);   
   }
 
+  Type *ChunkTraceBranchArgs[] = {Int32Ty, Int8Ty};
+  ChunkTraceBranchTtTy = FunctionType::get(VoidTy, ChunkTraceBranchArgs, false);
+  {
+    AttributeList AL;
+    AL = AL.addAttribute(CTX, AttributeList::FunctionIndex,
+                         Attribute::NoInline);
+    AL = AL.addAttribute(CTX, AttributeList::FunctionIndex,
+                         Attribute::OptimizeNone);
+    ChunkTraceBranchTT = M.getOrInsertFunction("__chunk_trace_branch_tt", ChunkTraceBranchTtTy, AL);
+  }
   /*
   Type *ChunkGepArgs[3] = {Int8PtrTy, Int32Ty, Int32Ty};
   FunctionType *ChunkGepArgsTy = FunctionType::get(VoidTy, ChunkGepArgs, false);
@@ -571,12 +587,12 @@ void LoopHandlingPass::visitSwitchInst(Module &M, Instruction *Inst) {
 
 }
 
-void LoopHandlingPass::visitCmpInst(Instruction *Inst, bool in_loop_header) {
+bool LoopHandlingPass::visitCmpInst(Instruction *Inst, bool in_loop_header) {
   Instruction *InsertPoint = Inst->getNextNode();
   if (!InsertPoint || isa<ConstantInt>(Inst))
-    return;
+    return false;
 
-  processCmp(Inst, InsertPoint,in_loop_header);
+  return processCmp(Inst, InsertPoint,in_loop_header);
 }
 
 void LoopHandlingPass::visitExploitation(Instruction *Inst) {
@@ -631,7 +647,7 @@ void LoopHandlingPass::visitExploitation(Instruction *Inst) {
 }
 
 
-void LoopHandlingPass::processCmp(Instruction *Cond, Instruction *InsertPoint, bool loop) {
+bool LoopHandlingPass::processCmp(Instruction *Cond, Instruction *InsertPoint, bool loop) {
   CmpInst *Cmp = dyn_cast<CmpInst>(Cond);
 
   Value *OpArg[2];
@@ -645,8 +661,7 @@ void LoopHandlingPass::processCmp(Instruction *Cond, Instruction *InsertPoint, b
   // outs() << "Compare: " << *Cmp << "\t" << OpType->getTypeID() << "\t" << OpArg[1]->getType()->getTypeID() << "\n";
   if (!((OpType->isIntegerTy() && OpType->getIntegerBitWidth() <= 64) ||
         OpType->isFloatTy() || OpType->isDoubleTy() || OpType->isPointerTy())) {
-    processBoolCmp(Cond,InsertPoint, loop);
-    return;
+    return processBoolCmp(Cond,InsertPoint, loop);
   }
 
   int num_bytes = OpType->getScalarSizeInBits() / 8;
@@ -654,7 +669,7 @@ void LoopHandlingPass::processCmp(Instruction *Cond, Instruction *InsertPoint, b
     if (OpType->isPointerTy()) {
       num_bytes = 8;
     } else {
-      return;
+      return false;
     }
   }
   Value *SizeArg = ConstantInt::get(Int32Ty, num_bytes);
@@ -674,11 +689,13 @@ void LoopHandlingPass::processCmp(Instruction *Cond, Instruction *InsertPoint, b
   // outs() << "insert ChunkCmpTT\n";
   CallInst *ProxyCall =
       IRB.CreateCall(ChunkCmpTT, {SizeArg, TypeArg, OpArg[0], OpArg[1], CondExt, in_loop_header, is_cnst1, is_cnst2});
+  return true;
 }
 
 
-void LoopHandlingPass::processBoolCmp(Value *Cond, Instruction *InsertPoint, bool loop) {
-  if (!Cond->getType()->isIntegerTy() || Cond->getType()->getIntegerBitWidth() > 32) return;
+bool LoopHandlingPass::processBoolCmp(Value *Cond, Instruction *InsertPoint, bool loop) {
+  if (!Cond->getType()->isIntegerTy() || Cond->getType()->getIntegerBitWidth() > 32) 
+    return false;
 
   Value *OpArg[2];
   OpArg[1] = ConstantInt::get(Int64Ty, 1);
@@ -696,7 +713,7 @@ void LoopHandlingPass::processBoolCmp(Value *Cond, Instruction *InsertPoint, boo
 
   CallInst *ProxyCall =
       IRB.CreateCall(ChunkCmpTT, {SizeArg, TypeArg, OpArg[0], OpArg[1], CondExt, in_loop_header, is_cnst1, is_cnst2});
-  
+  return true;
 }
 
 
@@ -759,6 +776,65 @@ void LoopHandlingPass::processLoadInst(Instruction *Inst, Instruction *InsertPoi
   */
 }
 
+void LoopHandlingPass::processBranch(Instruction *Cond, DominatorTree &DomTree, PostDominatorTree &PostDomTree, LoopInfo &LI) {
+
+  CmpInst *cmp = dyn_cast<CmpInst>(Cond);
+  BasicBlock *BB = Cond->getParent();
+  Instruction *term = BB->getTerminator();
+  
+  // skip when the block is not a branch
+  if (!isa<BranchInst>(term))
+    return;
+
+  // skip when the branch is not related to cmp instruction
+  BranchInst *branch = dyn_cast<BranchInst>(term);
+  if (branch->isUnconditional() || (branch->getCondition() != cmp))
+    return;
+
+  // skip when the branch is loop condition
+  Loop *loop = LI.getLoopFor(BB);
+  if (loop && loop->getHeader() == BB)
+    return;
+  
+  // find the first common successor of branch as the frontier
+  BasicBlock *Frontier = nullptr;
+  std::queue<BasicBlock* > Queue;
+  std::set<BasicBlock* > BlockSet;
+  Queue.push(BB);
+  BlockSet.insert(BB);
+
+  while (!Queue.empty()) {
+    BasicBlock *cur = Queue.front();
+    Queue.pop();
+
+    for (auto it = succ_begin(cur); it != succ_end(cur); it++) {
+      BasicBlock *succ = *it;
+      if (BlockSet.find(succ) == BlockSet.end()) {
+        BlockSet.insert(succ);
+        Queue.push(succ);
+        // the branch must control the frontier, aka dominat & postdominate
+        if (DomTree.dominates(BB, succ) && PostDomTree.dominates(succ, BB)) {
+          Frontier = succ;
+          break;
+        }
+      }
+    }
+
+    if (Frontier) break;
+  }
+
+  if (Frontier) {
+    if (!isa<ReturnInst>(Frontier->getTerminator())) {
+      int hash = getInstructionId(Cond);
+      Constant *IHash = ConstantInt::get(Int32Ty, hash);
+      IRBuilder<> BeforeCond(Cond);
+      BeforeCond.CreateCall(ChunkTraceBranchTT, {IHash, NumZero});
+      IRBuilder<> BeforeFrontier(&*Frontier->getFirstInsertionPt());
+      BeforeFrontier.CreateCall(ChunkTraceBranchTT, {IHash, NumOne});
+    }
+  }
+
+}
 
 bool LoopHandlingPass::runOnModule(Module &M) {
 
@@ -768,6 +844,8 @@ bool LoopHandlingPass::runOnModule(Module &M) {
     if (F.isDeclaration() ||F.getName().startswith(StringRef("__chunk_")) || F.getName().startswith(StringRef("__dfsw_")) || F.getName().startswith(StringRef("asan.module"))) {
       continue;
     }
+
+    // get all loop info and record loop header blocks
     auto &LI = getAnalysis<LoopInfoWrapperPass>(F).getLoopInfo();
     std::set<BasicBlock *> loop_header_set;
     for (LoopInfo::iterator LIT = LI.begin(), LEND = LI.end(); LIT != LEND; ++LIT) {
@@ -775,11 +853,16 @@ bool LoopHandlingPass::runOnModule(Module &M) {
       BasicBlock *BB = LoopI->getHeader();
       loop_header_set.insert(BB);
     }
+
+    auto &DomTree = getAnalysis<DominatorTreeWrapperPass>(F).getDomTree();
+    auto &PostDomTree = getAnalysis<PostDominatorTreeWrapperPass>(F).getPostDomTree();
+
     for (auto &BB : F) {
       bool in_loop_header = false;
       if (loop_header_set.find(&BB) != loop_header_set.end()) {
         in_loop_header = true;
       }
+
       for (auto &Inst : BB) {
         if (isa<CallInst>(&Inst)) 
           visitCallInst(&Inst);
@@ -792,7 +875,9 @@ bool LoopHandlingPass::runOnModule(Module &M) {
         } else if (isa<SwitchInst>(&Inst)) {
           visitSwitchInst(M, &Inst);
         } else if (isa<CmpInst>(&Inst)) {
-          visitCmpInst(&Inst, in_loop_header);
+          if (visitCmpInst(&Inst, in_loop_header)) {
+            processBranch(&Inst, DomTree, PostDomTree, LI);
+          }
         }
       }
     }

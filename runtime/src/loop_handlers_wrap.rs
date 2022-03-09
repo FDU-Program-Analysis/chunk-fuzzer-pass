@@ -19,6 +19,10 @@ lazy_static! {
     static ref OS: Mutex<Option<ObjectStack>> = Mutex::new(Some(ObjectStack::new()));
 }
 
+lazy_static! {
+    static ref CLS: Mutex<Option<CmpLabelsStack>> = Mutex::new(Some(CmpLabelsStack::new()));
+}
+
 #[no_mangle]
 pub extern "C" fn __chunk_get_load_label(
     _a: *const i8,
@@ -477,6 +481,40 @@ pub extern "C" fn __dfsw___chunk_trace_lenfn_tt(
     }
 
 }
+
+#[no_mangle]
+pub extern "C" fn __chunk_trace_branch_tt(
+    _a: u32,
+    _b: u8,
+) {
+    panic!("Forbid calling __chunk_trace_branch_tt directly");
+}
+
+#[no_mangle]
+pub extern "C" fn __dfsw___chunk_trace_branch_tt(
+    hash: u32,
+    itype: u8,
+    _l1: DfsanLabel,
+    _l2: DfsanLabel,    
+) {
+    let mut clsl = CLS.lock().unwrap();
+    if let Some(ref mut cls) = *clsl {
+        match itype {
+            0 => {
+                eprintln!("\n[block start] hash {}", hash);
+                cls.new_label(hash);
+            },
+            1 => {
+                eprintln!("[block end] hash {}\n", hash);
+                cls.pop_label(hash);
+            },
+            _ => {
+                panic!("trace branch error!");
+            }
+        }
+    }
+}
+
 
 /*
 #[no_mangle]

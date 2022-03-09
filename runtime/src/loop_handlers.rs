@@ -877,6 +877,75 @@ impl Drop for ObjectStack {
 //     println!("{}", std::any::type_name::<T>())
 // }
 
+// Compare label
+#[derive(Debug, Clone)]
+pub struct CompareLabel {
+    hash: u32,
+}
+
+impl CompareLabel {
+    pub fn new(
+        hash: u32,
+    ) -> Self {
+        Self{
+            hash,
+        }
+    }
+}
+
+#[derive(Debug)]
+pub struct CmpLabelsStack {
+    labels: Vec<CompareLabel>,
+    cur_id: usize,
+}
+
+impl CmpLabelsStack {
+    pub fn new() -> Self {
+        let mut labels = Vec::with_capacity(STACK_MAX);
+        labels.push(CompareLabel::new(0));
+        Self {
+            labels,
+            cur_id: 0,
+        }
+    }
+
+    // function: push new label for stack
+    #[inline(always)]
+    pub fn new_label(
+        &mut self,
+        hash: u32,
+    ) {
+        let len = self.labels.len();
+        if len < STACK_MAX {
+            self.labels.push(CompareLabel::new(hash));
+            self.cur_id += 1;
+            eprintln!("push a new compare label {} in stack id {}", hash, self.cur_id);
+            return;
+        
+        } else {
+            panic!("[ERR]: more than {} objs.. #[ERR]", STACK_MAX);
+        }
+    }
+
+    pub fn pop_label(
+        &mut self,
+        hash: u32,
+    ) {
+        let top = self.labels.pop();
+        if top.is_some() {
+            let top_label = top.unwrap();
+            if hash != 0 && top_label.hash != hash {
+                panic!("[ERR] :pop incorrect Hash {}, stack current hash {} #[ERR]", hash, top_label.hash);
+            }
+
+            self.cur_id -= 1;
+            eprintln!("pop hash {} and stack cur_id is {}", hash, self.cur_id);
+        
+        } else {
+            panic!("[ERR] :STACK EMPTY! #[ERR]");
+        }
+    }
+}
 
 pub fn hash_combine(
     ts: &Vec<TaintSeg>
