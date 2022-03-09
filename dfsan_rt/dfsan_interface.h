@@ -16,7 +16,7 @@
 #include <stddef.h>
 #include <stdint.h>
 #include "./common_interface_defs.h"
-#include "/home/dp/Documents/fuzzing/chunk-fuzzer-pass/include/defs.h"
+#include "../include/defs.h"
 
 #ifdef __cplusplus
 extern "C" {
