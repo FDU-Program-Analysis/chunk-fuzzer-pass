@@ -421,10 +421,10 @@ impl ObjectStack {
                 other => other,
             }
         });
-        // eprintln!("vec to minimize: ");
-        // for i in list.clone() {
-        //     eprintln!("lb: {:016X}, begin: {}, end: {}, son_is_none: {}", i.lb, i.begin, i.end, i.son.is_none());
-        // }
+        eprintln!("vec to minimize: ");
+        for i in list.clone() {
+            eprintln!("lb: {:016X}, begin: {}, end: {}, son_is_none: {}", i.lb, i.begin, i.end, i.son.is_none());
+        }
 
         let mut new_list = vec![];
         let none_ts = TaintSeg{
@@ -462,7 +462,7 @@ impl ObjectStack {
                         loop_handlers::ObjectStack::insert_node(&mut cur_ts, prev_ts);
                     },
                     SegRelation::RightConnect => {
-                        // eprintln!("RightConnect: cur_ts: {{lb: {:016X}, begin: {}, end:{}, son_is_none: {}}}, list[i]: {{lb: {:016X}, begin: {}, end:{}, son_is_none: {}}}", cur_ts.lb, cur_ts.begin, cur_ts.end, cur_ts.son.is_none(), list[i].lb, list[i].begin, list[i].end, list[i].son.is_none());
+                        eprintln!("RightConnect: cur_ts: {{lb: {:016X}, begin: {}, end:{}, son_is_none: {}}}, list[i]: {{lb: {:016X}, begin: {}, end:{}, son_is_none: {}}}", cur_ts.lb, cur_ts.begin, cur_ts.end, cur_ts.son.is_none(), list[i].lb, list[i].begin, list[i].end, list[i].son.is_none());
                         if loop_handlers::ObjectStack::access_check(cur_ts.lb as u64, 0) != 0 {
                             let prev_ts = cur_ts.clone();
                             cur_ts = none_ts.clone();
@@ -489,7 +489,7 @@ impl ObjectStack {
                         }
                     },
                     SegRelation::RightOverlap => {
-                        // eprintln!("RightOverlap: cur_ts: {{lb: {:016X}, begin: {}, end:{}, son_is_none: {}}}, list[i]: {{lb: {:016X}, begin: {}, end:{}, son_is_none: {}}}", cur_ts.lb, cur_ts.begin, cur_ts.end, cur_ts.son.is_none(), list[i].lb, list[i].begin, list[i].end, list[i].son.is_none());
+                        eprintln!("RightOverlap: cur_ts: {{lb: {:016X}, begin: {}, end:{}, son_is_none: {}}}, list[i]: {{lb: {:016X}, begin: {}, end:{}, son_is_none: {}}}", cur_ts.lb, cur_ts.begin, cur_ts.end, cur_ts.son.is_none(), list[i].lb, list[i].begin, list[i].end, list[i].son.is_none());
                         
                         if loop_handlers::ObjectStack::access_check(cur_ts.lb as u64, 0) == 0 {
                             // lb comes from hash_combine
@@ -514,19 +514,24 @@ impl ObjectStack {
                             eprintln!("RightOverlap else");
                             let overlap_begin = list[i].begin;
                             let overlap_end = cur_ts.end;
-                            
+                            eprintln!("overlap range begin: {}, end: {}", overlap_begin, overlap_end);
+
                             let mut left_son_counter = 0;
                             let mut queue: Vec<TaintSeg> = vec![];
+                            // eprintln!("left queue:");
                             queue.push(cur_ts.clone());
                             while queue.len() != 0 {
                                 if let Some(top) = queue.pop() {
+                                    // eprintln!("top {:?}", top);
                                     if let Some(son) = top.son {
                                         for i in son {
                                             if i.begin >= overlap_begin && i.end <= overlap_end {
                                                 if i.son.is_none() {
                                                     left_son_counter += 1;
                                                 }
-                                                queue.push(i);
+                                                queue.push(i.clone());
+                                            } else if i.end > overlap_begin && i.end <= overlap_end {
+                                                queue.push(i.clone());
                                             }
                                         }
                                     }    
@@ -534,24 +539,28 @@ impl ObjectStack {
                             }
 
                             let mut right_son_counter = 0;
+                            // eprintln!("right queue:");
                             queue.clear();
                             queue.push(list[i].clone());
                             while queue.len() != 0 {
                                 if let Some(top) = queue.pop() {
+                                    // eprintln!("top {:?}", top);
                                     if let Some(son) = top.son {
                                         for i in son {
                                             if i.begin <= overlap_begin && i.end >= overlap_end {
                                                 if i.son.is_none() {
                                                     right_son_counter += 1;
                                                 }
-                                                queue.push(i);
+                                                queue.push(i.clone());
+                                            } else if i.begin >= overlap_begin && i.begin < overlap_end {
+                                                queue.push(i.clone());
                                             }
                                         }
                                     }    
                                 }
                             }
 
-                            // eprintln!("left: {}, right: {}", left_son_counter, right_son_counter);
+                            eprintln!("left: {}, right: {}", left_son_counter, right_son_counter);
 
                             let mut queue: Vec<&mut TaintSeg> = vec![];
                             let mut prev_ts = cur_ts.clone();
@@ -559,7 +568,6 @@ impl ObjectStack {
                             cur_ts.begin = prev_ts.begin;
                             cur_ts.end = list[i].end;
 
-                            // let mut new_ts = none_ts.clone();
                             // remove latter node left overlap node
                             if left_son_counter > right_son_counter {
                                 list[i].begin = overlap_end;
@@ -601,7 +609,6 @@ impl ObjectStack {
                             cur_ts.lb = hash_combine(cur_ts.son.as_ref().unwrap());
                             // eprintln!("{:?}", cur_ts);
     
-    
                             // println!("RightOverlap else: cur_ts: {{lb: {:016X}, begin: {}, end:{}}}, list[i]: {{lb: {:016X}, begin: {}, end:{}}}", cur_ts.lb, cur_ts.begin, cur_ts.end, list[i].lb, list[i].begin, list[i].end);
                             // println!("please check function: handle_overlap");
                         }
@@ -624,15 +631,15 @@ impl ObjectStack {
         list.append(&mut new_list);
         loop_handlers::ObjectStack::access_check(list[0].lb, list[0].end - list[0].begin);
 
-        // eprintln!("minimized: ");
-        // for i in list.clone() {
-        //     eprintln!("top lb: {:016X}, begin: {}, end:{}, son_is_none: {}", i.lb, i.begin, i.end, i.son.is_none());
-        //     if let Some(son) = i.clone().son {
-        //         for j in son.clone() {
-        //             eprintln!("son lb: {:016X}, begin: {}, end:{}, son_is_none: {}", j.lb, j.begin, j.end, j.son.is_none());
-        //         }   
-        //     }
-        // }
+        eprintln!("minimized: ");
+        for i in list.clone() {
+            eprintln!("top lb: {:016X}, begin: {}, end: {}, son_is_none: {}", i.lb, i.begin, i.end, i.son.is_none());
+            if let Some(son) = i.clone().son {
+                for j in son.clone() {
+                    eprintln!("son lb: {:016X}, begin: {}, end: {}, son_is_none: {}", j.lb, j.begin, j.end, j.son.is_none());
+                }   
+            }
+        }
     }
 
     // if size == 0 ,search lb in LC, return 0 if not found
@@ -701,7 +708,7 @@ impl ObjectStack {
         list :&mut Vec<TaintSeg>,
     ) {
         if self.objs[self.cur_id].is_loop {
-            // eprintln!("loop insert labels");
+            eprintln!("loop insert labels");
             if self.objs[self.cur_id].cur_iter.is_none() {
                 panic!("[ERR]: Loop object doesn't have cur_iter");
             }
@@ -712,28 +719,28 @@ impl ObjectStack {
                         continue;
                     }
                     else {
-                        // eprintln!("[insert label] {:?}", i);
+                        eprintln!("[insert label] {:?}", i);
                         tmp_iter.push(i);
-                        // eprintln!("current list:");
-                        // for j in tmp_iter.clone() {
-                        //     eprintln!("{:?}", j);
-                        // }
+                        eprintln!("current list:");
+                        for j in tmp_iter.clone() {
+                            eprintln!("{:?}", j);
+                        }
                     }
                 }
             }
         } else {
-            // eprintln!("function insert labels");
+            eprintln!("function insert labels");
             for i in list.clone() {
                 if self.objs[self.cur_id].sum.contains(&i) {
                     continue;
                 }
                 else {
-                    // eprintln!("[insert label] {:?}", i);
+                    eprintln!("[insert label] {:?}", i);
                     self.objs[self.cur_id].sum.push(i);
-                    // eprintln!("current list:");
-                    // for j in self.objs[self.cur_id].sum.clone() {
-                    //     eprintln!("{:?}", j);
-                    // }
+                    eprintln!("current list:");
+                    for j in self.objs[self.cur_id].sum.clone() {
+                        eprintln!("{:?}", j);
+                    }
             }
             }
         }
