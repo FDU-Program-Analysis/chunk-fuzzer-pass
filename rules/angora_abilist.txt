@@ -28,6 +28,8 @@ fun:__chunk_trace_gep_tt=uninstrumented
 fun:__chunk_trace_gep_tt=custom
 fun:__chunk_trace_branch_tt=uninstrumented
 fun:__chunk_trace_branch_tt=custom
+fun:__debug_inst_loc_fn=uninstrumented
+fun:__debug_inst_loc_fn=custom
 
 # Trace-PC
 fun:__angora_trace_cmp=uninstrumented

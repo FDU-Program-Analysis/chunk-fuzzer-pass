@@ -78,8 +78,8 @@ impl Logger {
     }
 
     pub fn erase_lb(&mut self, lb: u64) {
-        &self.data.enums.remove(&lb);
-        &self.data.tags.remove(&lb);
+        let _ = &self.data.enums.remove(&lb);
+        let _ = &self.data.tags.remove(&lb);
         if let Some(index) = self.data.cond_list.iter().position(|x| x.lb1 == lb || x.lb2 == lb) {
             self.data.cond_list.remove(index);
         };
@@ -136,7 +136,7 @@ impl Logger {
         }
         
         for key in del {
-            &self.data.enums.remove(&key);
+            let _ = &self.data.enums.remove(&key);
         }
         let enum_clone = self.data.enums.clone();
         self.data.cond_list.retain(|&item| enum_clone.contains_key(&item.lb1) == false);

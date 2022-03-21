@@ -147,6 +147,7 @@ struct LoopHandlingPass : public ModulePass {
   FunctionType *ChunkLenFnTtTy;
   FunctionType *ChunkOffsFnTtTy;
   FunctionType *ChunkTraceBranchTtTy;
+  FunctionType *DebugInstLocTy;
 
   FunctionCallee PrintfFn;
   FunctionCallee LoadLabelDumpFn;
@@ -161,6 +162,7 @@ struct LoopHandlingPass : public ModulePass {
   FunctionCallee ChunkOffsFnTT;
   // FunctionCallee ChunkGepTT;
   FunctionCallee ChunkTraceBranchTT;
+  FunctionCallee DebugInstLocFn;
 
 
   LoopHandlingPass() : ModulePass(ID) {}
@@ -175,6 +177,8 @@ struct LoopHandlingPass : public ModulePass {
   u32 getFunctionId(Function *F);
   void setRandomNumSeed(u32 seed);
   void initVariables(Module &M);
+  void getInstLoc(Instruction *Inst, std::string &fname, int &line, int &col);
+  void insertDebugInstLocFn(Instruction *Inst, u32 hash, int type);
 
   Value *castArgType(IRBuilder<> &IRB, Value *V); //从angorapass里抄来的 setValueNotSan直接注释掉了
 
@@ -422,6 +426,19 @@ void LoopHandlingPass::initVariables(Module &M) {
                          Attribute::OptimizeNone);
     ChunkTraceBranchTT = M.getOrInsertFunction("__chunk_trace_branch_tt", ChunkTraceBranchTtTy, AL);
   }
+
+  Type *DebugInstLocFnArgs[] = {Int8PtrTy, Int32Ty, Int32Ty, Int32Ty, Int8Ty};
+  DebugInstLocTy = FunctionType::get(VoidTy, DebugInstLocFnArgs, false);
+  {
+    AttributeList AL;
+    AL = AL.addAttribute(CTX, AttributeList::FunctionIndex,
+                         Attribute::NoInline);
+    AL = AL.addAttribute(CTX, AttributeList::FunctionIndex,
+                         Attribute::OptimizeNone);
+    DebugInstLocFn = M.getOrInsertFunction("__debug_inst_loc_fn", DebugInstLocTy, AL);
+  }
+
+
   /*
   Type *ChunkGepArgs[3] = {Int8PtrTy, Int32Ty, Int32Ty};
   FunctionType *ChunkGepArgsTy = FunctionType::get(VoidTy, ChunkGepArgs, false);
@@ -476,6 +493,7 @@ void LoopHandlingPass::visitCallInst(Instruction *Inst) {
   if (!Callee || isa<InlineAsm>(Caller->getCalledValue())) {
     return;
   }
+
   visitExploitation(Inst);
 
   if (Callee->isIntrinsic()) {
@@ -584,7 +602,7 @@ void LoopHandlingPass::visitSwitchInst(Module &M, Instruction *Inst) {
 
   CallInst *ProxyCall = IRB.CreateCall(
       ChunkSwTT, {SizeArg, CondExt, SwNum, ArrPtr});
-
+  insertDebugInstLocFn(Inst, 0, 6);
 }
 
 bool LoopHandlingPass::visitCmpInst(Instruction *Inst, bool in_loop_header) {
@@ -601,6 +619,7 @@ void LoopHandlingPass::visitExploitation(Instruction *Inst) {
   if (!AfterCall) {
     return;
   }
+
   IRBuilder<> AfterBuilder(AfterCall);
   CallInst *Caller = dyn_cast<CallInst>(Inst);
   
@@ -615,17 +634,19 @@ void LoopHandlingPass::visitExploitation(Instruction *Inst) {
       ArgSize = Caller->getArgOperand(2); // int32ty
     }
 
-    Value *is_cnst1 =  isa<Constant>(OpArg[0])? BoolTrue : BoolFalse;
-    Value *is_cnst2 =  isa<Constant>(OpArg[1])? BoolTrue : BoolFalse;
+    Value *is_cnst1 = isa<Constant>(OpArg[0])? BoolTrue : BoolFalse;
+    Value *is_cnst2 = isa<Constant>(OpArg[1])? BoolTrue : BoolFalse;
 
     CallInst *CmpFnCall = AfterBuilder.CreateCall(ChunkCmpFnTT, {OpArg[0], OpArg[1], ArgSize, is_cnst1, is_cnst2});
+    insertDebugInstLocFn(Inst, 0, 1);
 
-  } else if(ExploitList.isIn(*Inst,OffsetFunc)) {
+  } else if(ExploitList.isIn(*Inst, OffsetFunc)) {
     // outs() << "fseek inst\n";
     Value *offset = Caller->getArgOperand(1);
     Value *whence = Caller->getArgOperand(2);
 
     CallInst *OffsFnCall = AfterBuilder.CreateCall(ChunkOffsFnTT, {offset, whence});
+    insertDebugInstLocFn(Inst, 0, 2);
     
   } else if(ExploitList.isIn(*Inst, LengthFunc[0])){
     // fread
@@ -633,16 +654,22 @@ void LoopHandlingPass::visitExploitation(Instruction *Inst) {
     Value *len1 = Caller->getArgOperand(1);
     Value *len2 = Caller->getArgOperand(2);
     CallInst *LenFnCall = AfterBuilder.CreateCall(ChunkLenFnTT, {dst, len1, len2, Caller});
+    insertDebugInstLocFn(Inst, 0, 3);
+
   } else if (ExploitList.isIn(*Inst, LengthFunc[1])) {
     // memcpy, memmove, strncpy
     Value *dst = Caller->getArgOperand(0);
     Value *len = Caller->getArgOperand(2);
     CallInst *LenFnCall = AfterBuilder.CreateCall(ChunkLenFnTT, {dst, len, NumZero, len});
+    insertDebugInstLocFn(Inst, 0, 4);
+
   } else if (ExploitList.isIn(*Inst, LengthFunc[2])){
     // read, pread
     Value *dst = Caller->getArgOperand(1);
     Value *len = Caller->getArgOperand(2);
     CallInst *LenFnCall = AfterBuilder.CreateCall(ChunkLenFnTT, {dst, len, NumZero, Caller});
+    insertDebugInstLocFn(Inst, 0, 5);
+
   }
 }
 
@@ -653,15 +680,15 @@ bool LoopHandlingPass::processCmp(Instruction *Cond, Instruction *InsertPoint, b
   Value *OpArg[2];
   OpArg[0] = Cmp->getOperand(0);
   OpArg[1] = Cmp->getOperand(1);
-  Value *is_cnst1 =  isa<Constant>(OpArg[0])? BoolTrue : BoolFalse;
-  Value *is_cnst2 =  isa<Constant>(OpArg[1])? BoolTrue : BoolFalse;
-  Value *in_loop_header =  loop? BoolTrue : BoolFalse;
+  Value *is_cnst1 = isa<Constant>(OpArg[0])? BoolTrue : BoolFalse;
+  Value *is_cnst2 = isa<Constant>(OpArg[1])? BoolTrue : BoolFalse;
+  Value *in_loop_header = loop? BoolTrue : BoolFalse;
 
   Type *OpType = OpArg[0]->getType();
   // outs() << "Compare: " << *Cmp << "\t" << OpType->getTypeID() << "\t" << OpArg[1]->getType()->getTypeID() << "\n";
   if (!((OpType->isIntegerTy() && OpType->getIntegerBitWidth() <= 64) ||
         OpType->isFloatTy() || OpType->isDoubleTy() || OpType->isPointerTy())) {
-    return processBoolCmp(Cond,InsertPoint, loop);
+    return processBoolCmp(Cond, InsertPoint, loop);
   }
 
   int num_bytes = OpType->getScalarSizeInBits() / 8;
@@ -689,6 +716,8 @@ bool LoopHandlingPass::processCmp(Instruction *Cond, Instruction *InsertPoint, b
   // outs() << "insert ChunkCmpTT\n";
   CallInst *ProxyCall =
       IRB.CreateCall(ChunkCmpTT, {SizeArg, TypeArg, OpArg[0], OpArg[1], CondExt, in_loop_header, is_cnst1, is_cnst2});
+  u32 hash = getInstructionId(Cond);
+  insertDebugInstLocFn(Cond, hash, 7);
   return true;
 }
 
@@ -713,6 +742,9 @@ bool LoopHandlingPass::processBoolCmp(Value *Cond, Instruction *InsertPoint, boo
 
   CallInst *ProxyCall =
       IRB.CreateCall(ChunkCmpTT, {SizeArg, TypeArg, OpArg[0], OpArg[1], CondExt, in_loop_header, is_cnst1, is_cnst2});
+  Instruction *Inst = dyn_cast<Instruction>(Cond);
+  u32 hash = getInstructionId(Inst);
+  insertDebugInstLocFn(Inst, hash, 7);
   return true;
 }
 
@@ -726,11 +758,13 @@ void LoopHandlingPass::processCallInst(Instruction *Inst, u32 hFunc) {
   
   ConstantInt *HFunc = ConstantInt::get(Int32Ty, hFunc);
   IRBuilder<> BeforeBuilder(Inst);
-  CallInst *Call1 = BeforeBuilder.CreateCall(PushNewObjFn,{BoolFalse, NumZero, HFunc});
+  CallInst *Call1 = BeforeBuilder.CreateCall(PushNewObjFn, {BoolFalse, NumZero, HFunc});
   IRBuilder<> AfterBuilder(AfterCall);
   Value *PopObjRet = AfterBuilder.CreateCall(PopObjFn, {HFunc});
 
-  return ;
+  insertDebugInstLocFn(Inst, hFunc, 0);
+
+  return;
 }
 
 void LoopHandlingPass::processLoadInst(Instruction *Inst, Instruction *InsertPoint) {
@@ -749,6 +783,7 @@ void LoopHandlingPass::processLoadInst(Instruction *Inst, Instruction *InsertPoi
     Value * LoadOprPtr = IRB.CreatePointerCast(
                   LoadOpr, Int8PtrTy, "loadOprPtr");
     CallInst *CallI = IRB.CreateCall(LoadLabelDumpFn, {LoadOprPtr, size});
+    insertDebugInstLocFn(Inst, 0, 8);
     /*
     if (GetElementPtrInst *Gep = dyn_cast<GetElementPtrInst>(LoadOpr) ) {
       Value *GepOpr = Gep->getPointerOperand();
@@ -825,14 +860,52 @@ void LoopHandlingPass::processBranch(Instruction *Cond, DominatorTree &DomTree, 
 
   if (Frontier) {
     if (!isa<ReturnInst>(Frontier->getTerminator())) {
-      int hash = getInstructionId(Cond);
+      int hash = getInstructionId(branch);
       Constant *IHash = ConstantInt::get(Int32Ty, hash);
-      IRBuilder<> BeforeCond(Cond);
+      IRBuilder<> BeforeCond(branch);
       BeforeCond.CreateCall(ChunkTraceBranchTT, {IHash, NumZero});
       IRBuilder<> BeforeFrontier(&*Frontier->getFirstInsertionPt());
       BeforeFrontier.CreateCall(ChunkTraceBranchTT, {IHash, NumOne});
     }
   }
+
+}
+
+void LoopHandlingPass::getInstLoc(Instruction *Inst, std::string &fname, int &line, int &col) {
+  DILocation *loc = Inst->getDebugLoc();
+  if (loc) {
+    fname = loc->getFilename().str();
+    line = loc->getLine();
+    col = loc->getColumn();
+  
+  } else {
+    fname = "NoFile" + std::to_string(getRandomInstructionId());
+    line = col = 0;
+  }
+}
+
+void LoopHandlingPass::insertDebugInstLocFn(Instruction *Inst, u32 hash, int type) {
+  std::string fname;
+  int line, col;
+
+  getInstLoc(Inst, fname, line, col);
+
+  auto *FNameStr = ConstantDataArray::getString(Inst->getContext(), fname);
+  Constant *FName = (Inst->getModule())->getOrInsertGlobal(fname, FNameStr->getType());
+  GlobalVariable *FileName = dyn_cast<GlobalVariable>(FName);
+  FileName->setLinkage(GlobalVariable::PrivateLinkage);
+  if (!FileName->hasInitializer()) {
+    FileName->setInitializer(FNameStr);
+  }
+  // GlobalVariable *FName = new GlobalVariable(FNameStr->getType(), true, GlobalVariable::PrivateLinkage, FNameStr);
+
+  IRBuilder<> IRB(Inst);
+  Value *FNamePtr = IRB.CreatePointerCast(FName, Int8PtrTy);
+  Value *Line = ConstantInt::get(Int32Ty, line);
+  Value *Col = ConstantInt::get(Int32Ty, col);
+  Value *Hash = ConstantInt::get(Int32Ty, hash);
+  Value *Type = ConstantInt::get(Int8Ty, type);
+  IRB.CreateCall(DebugInstLocFn, {FNamePtr, Line, Col, Hash, Type});
 
 }
 
@@ -876,7 +949,7 @@ bool LoopHandlingPass::runOnModule(Module &M) {
           visitSwitchInst(M, &Inst);
         } else if (isa<CmpInst>(&Inst)) {
           if (visitCmpInst(&Inst, in_loop_header)) {
-            processBranch(&Inst, DomTree, PostDomTree, LI);
+            // processBranch(&Inst, DomTree, PostDomTree, LI);
           }
         }
       }

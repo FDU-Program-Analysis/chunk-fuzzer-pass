@@ -9,6 +9,7 @@ use std::{
     env,
     path::PathBuf,
     ffi::OsStr,
+    ffi::CStr,
 };
 use libc::c_char;
 use std::convert::TryInto;
@@ -40,6 +41,7 @@ pub extern "C" fn __dfsw___chunk_get_load_label(
 ) -> u32 {
     let mut osl = OS.lock().unwrap();
     if let Some(ref mut os) = *osl {
+        // eprintln!("[chunk_get_load_label]");
         let arglen = if size == 0 {
             unsafe { libc::strlen(addr) as usize }
         } else {
@@ -78,7 +80,7 @@ pub extern "C" fn __dfsw___chunk_push_new_obj(
     if is_loop && loop_cnt != 0 {
         return;
     }
-    //println!("push obj :{}", loop_hash);
+    eprintln!("push obj :{}", loop_hash);
     let mut osl = OS.lock().unwrap();
     if let Some(ref mut os) = *osl {
         os.new_obj(is_loop, loop_hash);
@@ -101,7 +103,7 @@ pub extern "C" fn __dfsw___chunk_dump_each_iter(
         return;
     }
     else {
-        // println!("[LOG]: Loop iter: {} #[LOG]",loop_cnt);
+        eprintln!("[LOG]: Loop iter: {} #[LOG]",loop_cnt);
         let mut osl = OS.lock().unwrap();
         if let Some(ref mut os) = *osl {
             os.dump_cur_iter(loop_cnt);
@@ -121,7 +123,7 @@ pub extern "C" fn __dfsw___chunk_pop_obj(
     loop_hash: u32,
     _l0: DfsanLabel,
 ) -> bool {
-    // println!("pop obj :{:X}", loop_hash);
+    eprintln!("pop obj: {}", loop_hash);
     let mut osl = OS.lock().unwrap();
     if let Some(ref mut os) = *osl {
         //println!("call pop_obj and hash is {}", loop_hash);
@@ -215,6 +217,9 @@ pub extern "C" fn __dfsw___chunk_trace_cmp_tt(
     let mut size1 = 0;
     let mut size2 = 0;
 
+    eprintln!("chunk_trace_cmp_tt");
+    eprintln!("trace cmp: size {}, op {}, ar1 {}, arg2 {}, l1 {}, l2 {}, in_loop_header {}",
+                size, op, arg1, arg2, l2, l3, in_loop_header);
     if in_loop_header == 1 {
 
         // 传入loop_handler,计数，收集在loop_header中的label的重复使用次数，在pop时过滤只使用一次的
@@ -321,6 +326,7 @@ pub extern "C" fn __dfsw___chunk_trace_switch_tt(
     }
     let mut real_size = 0;
 
+    eprintln!("chunk_trace_switch_tt");
     // let mut op = defs::COND_ICMP_EQ_OP;
     let sw_args = unsafe { slice::from_raw_parts(args, num as usize) }.to_vec();
     let mut osl = OS.lock().unwrap();
@@ -375,6 +381,8 @@ pub extern "C" fn __dfsw___chunk_trace_cmpfn_tt(
         return;
     }
 
+    eprintln!("chunk_trace_cmpfn_tt");
+
     let arg1 = unsafe { slice::from_raw_parts(parg1 as *mut u8, arglen1) }.to_vec();
     let arg2 = unsafe { slice::from_raw_parts(parg2 as *mut u8, arglen2) }.to_vec();
     if lb1 > 0  && lb2 > 0 {
@@ -422,6 +430,7 @@ pub extern "C" fn __dfsw___chunk_trace_offsfn_tt(
 ) {
     // whence: SEEK_SET 0 ;SEEK_CUR 1; SEEK_END 2
     if l0 != 0 {
+        eprintln!("chunk_trace_offsfn_tt");
         log_cond(whence, offset as u32, l0 as u64, 0, ChunkField::Offset);
         let mut osl = OS.lock().unwrap();
         if let Some(ref mut os) = *osl {
@@ -461,6 +470,7 @@ pub extern "C" fn __dfsw___chunk_trace_lenfn_tt(
     // println!("lenfn_tt : {0},{1},{2},{3}", lb, _len1, len2, len);
     // println!("lables:  l0: {}, l1: {}, l2 :{}, l3: {}, ", _l0, l1, l2, _l3);
 
+    eprintln!("chunk_trace_lenfn_tt");
     // lb先dst后len
     if lb != 0 && l1 != 0 {
         log_cond(0, len as u32, l1 as u64, lb as u64, ChunkField::Length);
@@ -471,7 +481,7 @@ pub extern "C" fn __dfsw___chunk_trace_lenfn_tt(
         }
     }
 
-    if len2!=0 && lb != 0 && l2 != 0 {
+    if len2 != 0 && lb != 0 && l2 != 0 {
         log_cond(0, len as u32, l2 as u64, lb as u64, ChunkField::Length);
         let mut osl = OS.lock().unwrap();
         if let Some(ref mut os) = *osl {
@@ -501,11 +511,11 @@ pub extern "C" fn __dfsw___chunk_trace_branch_tt(
     if let Some(ref mut cls) = *clsl {
         match itype {
             0 => {
-                eprintln!("\n[block start] hash {}", hash);
+                eprintln!("[block start] hash {}", hash);
                 cls.new_label(hash);
             },
             1 => {
-                eprintln!("[block end] hash {}\n", hash);
+                eprintln!("[block end] hash {}", hash);
                 cls.pop_label(hash);
             },
             _ => {
@@ -515,6 +525,70 @@ pub extern "C" fn __dfsw___chunk_trace_branch_tt(
     }
 }
 
+#[no_mangle]
+pub extern "C" fn __debug_inst_loc_fn(
+    _a: *const i8,
+    _b: u32,
+    _c: u32,
+    _d: u32,
+    _e: u32,
+) {
+    panic!("Forbid calling __debug_inst_loc_fn directly");
+}
+
+#[no_mangle]
+pub extern "C" fn __dfsw___debug_inst_loc_fn(
+    fname: *const i8,
+    line: u32,
+    col: u32,
+    hash: u32,
+    itype: u32,
+    _l1: DfsanLabel,
+    _l2: DfsanLabel,
+    _l3: DfsanLabel,
+    _l4: DfsanLabel,
+    _l5: DfsanLabel,
+) {
+    // convert C string tp Rust string
+    let chr = unsafe {
+        assert!(!fname.is_null());
+        CStr::from_ptr(fname)
+    };
+    let fname_slice = chr.to_str().unwrap();
+
+    match itype {
+        0 => {
+            eprint!("[func call] ");
+        },
+        1 => {
+            eprint!("[cmp func] ");
+        },
+        2 => {
+            eprint!("[offset func] ");
+        },
+        3 => {
+            eprint!("[fread] ");
+        },
+        4 => {
+            eprint!("[memcpy] ");
+        },
+        5 => {
+            eprint!("[read] ");
+        }
+        6 => {
+            eprint!("[switch] ");
+        },
+        7 => {
+            eprint!("\n[cmp inst] ");
+        },
+        8 => {
+            eprint!("[load] ");
+        },
+        _ => {}
+    }
+
+    eprintln!("trace : hash {:016X}, {}, {}, {}", hash, fname_slice, line, col);
+}
 
 /*
 #[no_mangle]
