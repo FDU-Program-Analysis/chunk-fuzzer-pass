@@ -27,7 +27,7 @@ static int granularity = 1; // byte level
 
 // extern void __angora_track_fini_rs();
 extern void __chunk_object_stack_fini();
-extern void __chunk_set_input_file_name();
+extern void __chunk_set_input_file_name(int );
 
 __attribute__((destructor(0))) void __angora_track_fini(void) {
   // __angora_track_fini_rs();
@@ -101,8 +101,12 @@ __dfsw_open(const char *path, int oflags, dfsan_label path_label,
   // char *strEnv = "";
   // strEnv = getenv("CHUNK_CURRENT_INPUT_FILE");
   // printf("CHUNK_CURRENT_INPUT_FILE: %s\n",strEnv);
-  set_input_file_name();
-  
+  int fsize = lseek(fd, 0, SEEK_END);
+  lseek(fd, 0, SEEK_SET);
+  // printf("CHUNK_CURRENT_INPUT_FILE size: %ld\n", fsize);
+
+  set_input_file_name(fsize);
+
   *ret_label = 0;
   return fd;
 }
@@ -125,7 +129,12 @@ __dfsw_fopen(const char *filename, const char *mode, dfsan_label fn_label,
   // char *strEnv = "";
   // strEnv = getenv("CHUNK_CURRENT_INPUT_FILE");
   // printf("CHUNK_CURRENT_INPUT_FILE: %s\n",strEnv);
-  set_input_file_name();
+  fseek(fd, 0, SEEK_END);
+  int fsize = ftell(fd);
+  fseek(fd, 0, SEEK_SET);
+  // printf("CHUNK_CURRENT_INPUT_FILE size: %ld\n", fsize);
+
+  set_input_file_name(fsize);
 
   *ret_label = 0;
   return fd;
@@ -148,8 +157,13 @@ __dfsw_fopen64(const char *filename, const char *mode, dfsan_label fn_label,
   char *strEnv = "";
   // strEnv = getenv("CHUNK_CURRENT_INPUT_FILE");
   // printf("CHUNK_CURRENT_INPUT_FILE: %s\n",strEnv);
-  set_input_file_name();
-  
+  fseek(fd, 0, SEEK_END);
+  int fsize = ftell(fd);
+  fseek(fd, 0, SEEK_SET);
+  // printf("CHUNK_CURRENT_INPUT_FILE size: %ld\n", fsize);
+
+  set_input_file_name(fsize);
+
   *ret_label = 0;
   return fd;
 }

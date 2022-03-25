@@ -144,7 +144,9 @@ pub extern "C" fn __chunk_object_stack_fini() {
 }
 
 #[no_mangle]
-pub extern "C" fn __chunk_set_input_file_name(){
+pub extern "C" fn __chunk_set_input_file_name(
+    fsize: u32,
+){
     let input_file = match env::var("CHUNK_CURRENT_INPUT_FILE") {
         Ok(path) => {
             //println!("CHUNK_CURRENT_INPUT_FILE: {:?}",path);
@@ -164,6 +166,7 @@ pub extern "C" fn __chunk_set_input_file_name(){
         json_file.set_file_name(json_name_os);
         // println!("json: {:?}", json_file);
         os.set_input_file_name(json_file);
+        os.set_input_file_size(fsize);
     } 
     let mut lcl = LC.lock().expect("Could not lock LC.");
     if let Some(ref mut lc) = *lcl {

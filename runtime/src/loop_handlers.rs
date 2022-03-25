@@ -59,6 +59,7 @@ pub struct ObjectStack {
     cur_id: usize,
     fd: Option<File>,
     access_counter: u32,
+    fsize: u32,
 }
 
 impl ObjectStack {
@@ -70,6 +71,7 @@ impl ObjectStack {
         cur_id: 0,
         // file_name: String::new(),
         fd: None,
+        fsize: 0,
         access_counter: 1,
         }
     }
@@ -387,7 +389,7 @@ impl ObjectStack {
     }
 
     pub fn remove_son(
-        mut list : &mut Vec<TaintSeg>,
+        list : &mut Vec<TaintSeg>,
         overlap_begin : u32,
         overlap_end : u32,
     ) {
@@ -802,7 +804,7 @@ impl ObjectStack {
     //若hash不匹配说明栈不平衡，出错了
     pub fn pop_obj(
         &mut self,
-        hash:u32,
+        hash: u32,
     ) {
         let top = self.objs.pop();
         if top.is_some() {
@@ -954,10 +956,18 @@ impl ObjectStack {
         self.fd = Some(json_file);
     }
 
+    pub fn set_input_file_size(
+        &mut self,
+        fsize: u32,
+    ) {
+        self.fsize = fsize;
+    }
+
     pub fn fini(
         &mut self,
     ) {
-        // eprintln!("fini: cur_id: {}, objs:{:?}", self.cur_id, self.objs);
+        eprintln!("fini: cur_id: {}, objs:{:?}", self.cur_id, self.objs);
+        eprintln!("file size: {}", self.fsize);
         while self.cur_id != 0 {
             if self.objs[self.cur_id].is_loop {
                 self.dump_cur_iter(0);
@@ -987,6 +997,35 @@ impl ObjectStack {
         //     }
         // }
 
+        if self.objs[self.cur_id].sum.len() == 1 {
+            let sum_clone = self.objs[self.cur_id].sum.clone();
+            let end = sum_clone[0].end;
+            if end < self.fsize {
+                let remain_sum = TaintSeg {
+                    lb: rand::thread_rng().gen_range(0..0x10000000)+0x300000000,
+                    begin: end,
+                    end: self.fsize,
+                    son: None,
+                    cntr: self.access_counter,
+                };
+                self.objs[self.cur_id].sum.push(remain_sum);
+            }
+
+        } else if self.objs[self.cur_id].sum.len() > 1 {
+            let sum_clone = self.objs[self.cur_id].sum.clone();
+            let end = sum_clone[sum_clone.len() - 1].end;
+            if end < self.fsize {
+                let remain_sum = TaintSeg {
+                    lb: rand::thread_rng().gen_range(0..0x10000000)+0x300000000,
+                    begin: end,
+                    end: self.fsize,
+                    son: None,
+                    cntr: self.access_counter,
+                };
+                self.objs[self.cur_id].sum.push(remain_sum);
+            }
+        }
+
         if self.objs[self.cur_id].sum.len() > 1 {
             let sum_clone = self.objs[self.cur_id].sum.clone();
             let sum_len = sum_clone.len();
@@ -999,6 +1038,7 @@ impl ObjectStack {
             };
             self.objs[self.cur_id].sum = vec![new_sum];
         }
+        
         s.push_str(&format!("{{\n"));
         for i in &self.objs[self.cur_id].sum {
             if &i == &self.objs[self.cur_id].sum.last().unwrap() {
@@ -1114,7 +1154,7 @@ impl CmpLabelsStack {
 }
 
 pub fn hash_combine(
-    ts: &Vec<TaintSeg>
+    ts: &Vec<TaintSeg>,
 ) -> u64 {
     let mut seed = 0;
     if ts.len() == 1 {
@@ -1125,6 +1165,10 @@ pub fn hash_combine(
             seed ^=
                 b.lb ^ 0x9E3779B97F4A7C15u64 ^ (seed << 6) ^ (seed >> 2);
         }
+    }
+
+    while loop_handlers::ObjectStack::access_check(seed, 0) != 0 {
+        seed = (seed << 1) + 1;
     }
     seed
 }
