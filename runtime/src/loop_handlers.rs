@@ -86,7 +86,7 @@ impl ObjectStack {
         if len < STACK_MAX {
             self.objs.push(ObjectLabels::new(is_loop, hash));
             self.cur_id += 1;
-            // eprintln!("new pbj push cur id of the stack is {}", self.cur_id);
+            eprintln!("new pbj push cur id of the stack is {}", self.cur_id);
             return;
         }
         else {
@@ -815,7 +815,44 @@ impl ObjectStack {
             // }
             
             if hash != 0 && top_obj.hash != hash {
-                panic!("[ERR] :pop error! incorrect Hash {} #[ERR]", top_obj.hash);
+                // eprintln!("stack len: {}, cur_id: {}", self.objs.len(), self.cur_id);                
+                let mut jmp_func = 0;
+                let len = self.objs.len();
+                for i in 0..len {
+                    if self.objs[i].hash == hash {
+                        jmp_func = i;
+                        break;
+                    }
+                    // eprintln!("stack id: {}, hash: {}", i, self.objs[i].hash);
+                }
+
+                if jmp_func != 0 {
+                    let mut cur_list = top_obj.sum;
+                    loop_handlers::ObjectStack::construct_tree(&mut cur_list);
+                    self.cur_id -= 1;
+                    self.insert_labels(&mut cur_list);
+
+                    while self.cur_id >= jmp_func {
+                        // eprintln!("stack pop cur id {}, label: {:?}", self.cur_id, self.objs[self.cur_id]);
+                        let obj = self.objs.pop();
+                        if obj.is_some() {
+                            let real_obj = obj.unwrap();
+                            let mut list = real_obj.sum;
+                            loop_handlers::ObjectStack::construct_tree(&mut list);
+                            self.cur_id -= 1;
+                            self.insert_labels(&mut list);
+                        }
+                    }
+
+                    // let len = self.objs.len();
+                    // for i in 0..len {
+                    //     eprintln!("stack id: {}, hash: {}, label {:?}", i, self.objs[i].hash, self.objs[i]);
+                    // }
+                    // eprintln!("cur_id is {}", self.cur_id);
+                    
+                } else {
+                    panic!("[ERR] :pop error! incorrect Hash {} #[ERR]", top_obj.hash);
+                }
             }
             else {
                 let mut list = top_obj.sum;
@@ -842,7 +879,7 @@ impl ObjectStack {
                 }
                 }
                 self.cur_id -= 1;
-                // eprintln!("after pop stack cur_id {}", self.cur_id);
+                eprintln!("after pop stack cur_id {}", self.cur_id);
                 // eprintln!("pop obj call insert labels");
                 self.insert_labels(&mut list);
             }
