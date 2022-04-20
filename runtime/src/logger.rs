@@ -9,7 +9,7 @@ use std::{
 
 // use crate::{len_label, tag_set_wrap};
 // use angora_common::{cond_stmt_base::*, config, defs, log_data::LogData};
-use angora_common::{cond_stmt_base::*, log_data::LogData};
+use angora_common::{cond_stmt_base::*, log_data::*};
 
 #[derive(Debug)]
 pub struct Logger {
@@ -31,20 +31,20 @@ impl Logger {
         self.data.tags.contains_key(&lb)
     }
 
-    pub fn save_tag(&mut self, lb: u64, size: u32) -> u32 {
+    pub fn save_tag(&mut self, lb: u64, filed: Offset) -> u32 {
         if lb > 0 {
             if self.data.tags.contains_key(&lb) {
                 if let Some(ret) = self.data.tags.get(&lb) {
-                    *ret
+                    ret.size
                 } 
                 else {
                     0
                 }
             }
             else {
-                if size != 0 {
+                if filed.size != 0 {
                     //save lb
-                    self.data.tags.insert(lb,size);
+                    self.data.tags.insert(lb, filed);
                 }
                 0
             }
@@ -52,7 +52,6 @@ impl Logger {
         else {
             0
         }
-
     }
 
     pub fn save_linear_constraint(&mut self, lb: u32) {
@@ -104,8 +103,8 @@ impl Logger {
             return;
         }
 
-        self.save_tag(cond.lb1, cond.size);
-        self.save_tag(cond.lb2, cond.size);
+        // self.save_tag(cond.lb1, cond.size);
+        // self.save_tag(cond.lb2, cond.size);
 
         if !self.data.cond_list.contains(&cond) {
             self.data.cond_list.push(cond);
@@ -159,20 +158,65 @@ impl Logger {
     }
 
     pub fn output_logs(&self, s: &mut String) {
+        for (k, v) in &self.data.tags {
+            eprintln!("lb: {}, begin: {}, end: {}, size: {}", k, v.begin, v.end, v.size);
+        }
         // output：(lb1，lb2, field, remarks)
         // remarks: Enum's candidate; Constraints's op; offset's absolute/relatively
-        for (key,value) in &self.data.enums {
-            s.push_str(&format!("({:016X};{:016X};Enum;{};{{",key,0,value.len()));
-            for vi in value {
-                s.push_str(&format!("{:02X?};",vi));
+        let mut count = 0;
+        let start = "start";
+        let end = "end";
+        let ty = "type";
+        let blank = "  ".repeat(1);
+        let blank2 = "  ".repeat(2);
+        let blank3 = "  ".repeat(3);
+        s.push_str(&format!("{{\n"));
+        for (key, value) in &self.data.enums {
+            if let Some(field) = self.data.tags.get(key) {
+                count += 1;
+                s.push_str(&format!("{}\"{}\": {{\n", blank, count));
+                s.push_str(&format!("{}\"{}\": {},\n", blank2, start, field.begin));
+                s.push_str(&format!("{}\"{}\": {},\n", blank2, end, field.end));
+                s.push_str(&format!("{}\"{}\": \"enum\",\n", blank2, ty));
+                s.push_str(&format!("{}\"num\": {},\n", blank2, value.len()));
+
+                s.push_str(&format!("{}\"candidates\": {{\n", blank2));
+                for i in 0..value.len()-1 {
+                    s.push_str(&format!("{}\"{}\": {:02X?},\n", blank3, i, value[i]));
+                }
+                s.push_str(&format!("{}\"{}\": {:02X?}\n", blank3, value.len()-1, value[value.len()-1]));
+                s.push_str(&format!("{}}}\n", blank2));
+                s.push_str(&format!("{}}},\n", blank));
+    
+            } else {
+                panic!("can not find lb {:016X} offset!", key);
             }
-            s.push_str(&format!("}})\n"));
         }
+
         for i in &self.data.cond_list {
-            if i.field != ChunkField::Constraint {
-                s.push_str(&format!("({:016X};{:016X};{:?};{})\n", i.lb1, i.lb2, i.field, i.op));
+            if i.field == ChunkField::Length {
+                if let Some(field1) = self.data.tags.get(&i.lb1) {
+                    if let Some(field2) = self.data.tags.get(&i.lb2) {
+                        count += 1;
+                        s.push_str(&format!("{}\"{}\": {{\n", blank, count));
+                        s.push_str(&format!("{}\"{}\": {},\n", blank2, start, field1.begin));
+                        s.push_str(&format!("{}\"{}\": {},\n", blank2, end, field1.end));
+                        s.push_str(&format!("{}\"{}\": \"length\",\n", blank2, ty));  
+                        
+                        s.push_str(&format!("{}\"target\": {{\n", blank2));
+                        s.push_str(&format!("{}\"{}\": {},\n", blank3, start, field2.begin));
+                        s.push_str(&format!("{}\"{}\": {}\n", blank3, start, field2.end));
+                        s.push_str(&format!("{}}}\n", blank2));
+                        s.push_str(&format!("{}}},\n", blank));
+    
+                    }
+                }
             }
         }
+        s.pop();
+        s.pop();
+        s.push('\n');
+        s.push_str(&format!("}}"));
     }
 
     fn fini(&mut self) {

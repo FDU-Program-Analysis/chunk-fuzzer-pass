@@ -1,5 +1,5 @@
 use super::*;
-use angora_common::{tag::*, cond_stmt_base::*};
+use angora_common::{tag::*, cond_stmt_base::*, log_data::*};
 // use itertools::Itertools;
 use lazy_static::lazy_static;
 use crate::{tag_set_wrap};
@@ -102,7 +102,7 @@ impl ObjectStack {
         return self.get_num_objs() - 1;
     }
 
-    // SegTag-> TaintTag ,minimize
+    // SegTag -> TaintTag ,minimize
     pub fn seg_tag_2_taint_tag(
         &mut self,
         lb: u64,
@@ -444,7 +444,7 @@ impl ObjectStack {
             else {
                 match loop_handlers::ObjectStack::seg_relation(&cur_ts, &list[i]) {
                     SegRelation::Same => {
-                        // eprintln!("Same: cur_ts: {{lb: {:016X}, begin: {}, end:{}, son_is_none: {}}}, list[i]: {{lb: {:016X}, begin: {}, end:{}, son_is_none: {}}}", cur_ts.lb, cur_ts.begin, cur_ts.end, cur_ts.son.is_none(), list[i].lb, list[i].begin, list[i].end, list[i].son.is_none());
+                        eprintln!("Same: cur_ts: {{lb: {:016X}, begin: {}, end: {}, son_is_none: {}}}, list[i]: {{lb: {:016X}, begin: {}, end: {}, son_is_none: {}}}", cur_ts.lb, cur_ts.begin, cur_ts.end, cur_ts.son.is_none(), list[i].lb, list[i].begin, list[i].end, list[i].son.is_none());
                         cur_ts.lb = min(cur_ts.lb, list[i].lb);
                         if ! list[i].son.is_none() {
                             let tmp = list[i].clone().son.unwrap();
@@ -454,18 +454,19 @@ impl ObjectStack {
                         }
                     },
                     SegRelation::Father => {
-                        // eprintln!("Father: cur_ts: {{lb: {:016X}, begin: {}, end:{}, son_is_none: {}}}, list[i]: {{lb: {:016X}, begin: {}, end:{}, son_is_none: {}}}", cur_ts.lb, cur_ts.begin, cur_ts.end, cur_ts.son.is_none(), list[i].lb, list[i].begin, list[i].end, list[i].son.is_none());
+                        eprintln!("Father: cur_ts: {{lb: {:016X}, begin: {}, end: {}, son_is_none: {}}}, list[i]: {{lb: {:016X}, begin: {}, end: {}, son_is_none: {}}}", cur_ts.lb, cur_ts.begin, cur_ts.end, cur_ts.son.is_none(), list[i].lb, list[i].begin, list[i].end, list[i].son.is_none());
                         loop_handlers::ObjectStack::insert_node(&mut cur_ts, list[i].clone())
                     },
                     SegRelation::Son => {
-                        // eprintln!("Son: cur_ts: {{lb: {:016X}, begin: {}, end:{}, son_is_none: {}}}, list[i]: {{lb: {:016X}, begin: {}, end:{}, son_is_none: {}}}", cur_ts.lb, cur_ts.begin, cur_ts.end, cur_ts.son.is_none(), list[i].lb, list[i].begin, list[i].end, list[i].son.is_none());
+                        eprintln!("Son: cur_ts: {{lb: {:016X}, begin: {}, end: {}, son_is_none: {}}}, list[i]: {{lb: {:016X}, begin: {}, end: {}, son_is_none: {}}}", cur_ts.lb, cur_ts.begin, cur_ts.end, cur_ts.son.is_none(), list[i].lb, list[i].begin, list[i].end, list[i].son.is_none());
                         let prev_ts = cur_ts;
                         cur_ts = list[i].clone();
                         loop_handlers::ObjectStack::insert_node(&mut cur_ts, prev_ts);
                     },
                     SegRelation::RightConnect => {
-                        eprintln!("RightConnect: cur_ts: {{lb: {:016X}, begin: {}, end:{}, son_is_none: {}}}, list[i]: {{lb: {:016X}, begin: {}, end:{}, son_is_none: {}}}", cur_ts.lb, cur_ts.begin, cur_ts.end, cur_ts.son.is_none(), list[i].lb, list[i].begin, list[i].end, list[i].son.is_none());
-                        if loop_handlers::ObjectStack::access_check(cur_ts.lb as u64, 0) != 0 {
+                        eprintln!("RightConnect: cur_ts: {{lb: {:016X}, begin: {}, end: {}, son_is_none: {}}}, list[i]: {{lb: {:016X}, begin: {}, end: {}, son_is_none: {}}}", cur_ts.lb, cur_ts.begin, cur_ts.end, cur_ts.son.is_none(), list[i].lb, list[i].begin, list[i].end, list[i].son.is_none());
+                        let tmp_field = Offset{begin: 0, end: 0, size: 0};
+                        if loop_handlers::ObjectStack::access_check(cur_ts.lb as u64, tmp_field) != 0 {
                             let prev_ts = cur_ts.clone();
                             cur_ts = none_ts.clone();
                             cur_ts.begin = prev_ts.begin;
@@ -492,7 +493,10 @@ impl ObjectStack {
                     },
                     SegRelation::RightOverlap => {
                         eprintln!("RightOverlap: cur_ts: {{lb: {:016X}, begin: {}, end:{}, son_is_none: {}}}, list[i]: {{lb: {:016X}, begin: {}, end:{}, son_is_none: {}}}", cur_ts.lb, cur_ts.begin, cur_ts.end, cur_ts.son.is_none(), list[i].lb, list[i].begin, list[i].end, list[i].son.is_none());
-                        
+                        new_list.push(cur_ts);
+                        cur_ts = list[i].clone();
+                               
+                        /*
                         if loop_handlers::ObjectStack::access_check(cur_ts.lb as u64, 0) == 0 {
                             // lb comes from hash_combine
                             cur_ts.end = list[i].end;
@@ -614,11 +618,12 @@ impl ObjectStack {
                             // println!("RightOverlap else: cur_ts: {{lb: {:016X}, begin: {}, end:{}}}, list[i]: {{lb: {:016X}, begin: {}, end:{}}}", cur_ts.lb, cur_ts.begin, cur_ts.end, list[i].lb, list[i].begin, list[i].end);
                             // println!("please check function: handle_overlap");
                         }
+                        */
 
                         
                     },
                     SegRelation::Disjoint => {
-                        // println!("Disjoint: cur_ts: {{lb: {:016X}, begin: {}, end:{}, son_is_none: {}}}, list[i]: {{lb: {:016X}, begin: {}, end:{}, son_is_none: {}}}", cur_ts.lb, cur_ts.begin, cur_ts.end, cur_ts.son.is_none(), list[i].lb, list[i].begin, list[i].end, list[i].son.is_none());
+                        eprintln!("Disjoint: cur_ts: {{lb: {:016X}, begin: {}, end: {}, son_is_none: {}}}, list[i]: {{lb: {:016X}, begin: {}, end: {}, son_is_none: {}}}", cur_ts.lb, cur_ts.begin, cur_ts.end, cur_ts.son.is_none(), list[i].lb, list[i].begin, list[i].end, list[i].son.is_none());
                         new_list.push(cur_ts);
                         cur_ts = list[i].clone();
                     },
@@ -631,7 +636,7 @@ impl ObjectStack {
         }
         list.clear();
         list.append(&mut new_list);
-        loop_handlers::ObjectStack::access_check(list[0].lb, list[0].end - list[0].begin);
+        // loop_handlers::ObjectStack::access_check(list[0].lb, list[0].end - list[0].begin);
 
         eprintln!("minimized: ");
         for i in list.clone() {
@@ -648,11 +653,11 @@ impl ObjectStack {
     // if size != 0, save lb in LC, always return 0
     pub fn access_check(
         lb: u64,
-        size: u32,
+        filed: Offset,
     ) -> u32 {
         let mut lcl = LC.lock().unwrap();
         if let Some(ref mut lc) = *lcl {
-            lc.save_tag(lb,size)
+            lc.save_tag(lb, filed)
         }
         else {
             0
@@ -670,11 +675,11 @@ impl ObjectStack {
         &mut self,
         lb: u32,
     ) -> u32 {
-        let saved = loop_handlers::ObjectStack::access_check(lb as u64, 0);
-        if saved != 0 {
-            // eprintln!("lb {} have already saved {}", lb, saved);
-            return saved;
-        }
+        // let saved = loop_handlers::ObjectStack::access_check(lb as u64, 0);
+        // if saved != 0 {
+        //     // eprintln!("lb {} have already saved {}", lb, saved);
+        //     return saved;
+        // }
         let mut set_list = tag_set_wrap::tag_set_find(lb as usize);
 
         // if set_list.len() > 0 {
@@ -687,6 +692,7 @@ impl ObjectStack {
             // if the label number > 1, it means that there are multi byte of input with constraint
             let mut lcl = LC.lock().unwrap();
             if let Some(ref mut lc) = *lcl {
+                eprintln!("save linear constraint lb: {}", lb);
                 lc.save_linear_constraint(lb)
             }
             return 0;
@@ -694,9 +700,10 @@ impl ObjectStack {
         if list.len() != 0 {
             eprintln!("load: lb {}, {:?}", lb, list);
             let size = list[0].end - list[0].begin;
+            let lb_filed = Offset::new(list[0].begin, list[0].end, size);
             eprintln!("get load label call insert label");
             self.insert_labels(&mut list);
-            loop_handlers::ObjectStack::access_check(lb as u64, size);
+            loop_handlers::ObjectStack::access_check(lb as u64, lb_filed);
             return size;
         }
         return 0;
@@ -860,7 +867,8 @@ impl ObjectStack {
                 loop_handlers::ObjectStack::construct_tree(&mut list);
                 if list.len() == 1 {
                 for (key,value) in &top_obj.length_candidates {
-                    let size = loop_handlers::ObjectStack::access_check(*key as u64, 0);
+                    let tmp_field = Offset{begin: 0, end: 0, size: 0};
+                    let size = loop_handlers::ObjectStack::access_check(*key as u64, tmp_field);
                     
                     if size != 0 && *value == top_obj.cur_iter_num {
                         // println!("loop_hash:{}, iter_num:{}, key: {}, value:{}, size: {}", hash, top_obj.cur_iter_num ,*key, *value, size);
@@ -887,8 +895,6 @@ impl ObjectStack {
             panic!("[ERR] :STACK EMPTY! #[ERR]");
         }
     }
-
-
 
     pub fn output_format(
         s: &mut String,
@@ -1075,6 +1081,12 @@ impl ObjectStack {
             };
             self.objs[self.cur_id].sum = vec![new_sum];
         }
+
+        eprintln!("finial vec:");
+        for i in self.objs[self.cur_id].sum.clone() {
+            print_son_node(i);
+            //eprintln!("lb: {:016X}, begin: {}, end: {}, son_is_none: {}", i.lb, i.begin, i.end, i.son.is_none());
+        }
         
         s.push_str(&format!("{{\n"));
         for i in &self.objs[self.cur_id].sum {
@@ -1203,9 +1215,18 @@ pub fn hash_combine(
                 b.lb ^ 0x9E3779B97F4A7C15u64 ^ (seed << 6) ^ (seed >> 2);
         }
     }
-
-    while loop_handlers::ObjectStack::access_check(seed, 0) != 0 {
-        seed = (seed << 1) + 1;
-    }
     seed
+}
+
+pub fn print_son_node(
+    ts: TaintSeg,
+) {
+    eprintln!("lb: {:016X}, begin: {}, end: {}, son_is_none: {}", ts.lb, ts.begin, ts.end, ts.son.is_none());
+    if let Some(son_list) = ts.son {
+        for i in son_list {
+            //eprintln!("lb: {:016X}, begin: {}, end: {}, son_is_none: {}", i.lb, i.begin, i.end, i.son.is_none());
+            print_son_node(i);
+        }
+        eprint!("\n");
+    }
 }

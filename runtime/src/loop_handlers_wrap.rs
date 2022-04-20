@@ -149,7 +149,7 @@ pub extern "C" fn __chunk_set_input_file_name(
 ){
     let input_file = match env::var("CHUNK_CURRENT_INPUT_FILE") {
         Ok(path) => {
-            //println!("CHUNK_CURRENT_INPUT_FILE: {:?}",path);
+            println!("CHUNK_CURRENT_INPUT_FILE: {:?}",path);
             PathBuf::from(path)
         },
         Err(_) => panic!("set input_name error"),
@@ -166,6 +166,7 @@ pub extern "C" fn __chunk_set_input_file_name(
         json_file.set_file_name(json_name_os);
         // println!("json: {:?}", json_file);
         os.set_input_file_name(json_file);
+        eprintln!("CHUNK FILE SIZE: {}", fsize);
         os.set_input_file_size(fsize);
     } 
     let mut lcl = LC.lock().expect("Could not lock LC.");
@@ -469,7 +470,7 @@ pub extern "C" fn __dfsw___chunk_trace_lenfn_tt(
 
     let len = ret as usize;
 
-    let lb = unsafe { dfsan_read_label(dst,len) };
+    let lb = unsafe { dfsan_read_label(dst, len) };
     // println!("lenfn_tt : {0},{1},{2},{3}", lb, _len1, len2, len);
     // println!("lables:  l0: {}, l1: {}, l2 :{}, l3: {}, ", _l0, l1, l2, _l3);
 

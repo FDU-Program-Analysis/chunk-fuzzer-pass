@@ -177,6 +177,7 @@ fun:rewind=discard
 fun:vsprintf=discard
 fun:vsnprintf=discard
 fun:vasprintf=discard
+fun:sprintf=discard
 # fun:__sprintf_chk=discard
 # others IO, for evaluate who.c
 fun:getutxent=uninstrumented
