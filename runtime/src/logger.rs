@@ -158,9 +158,13 @@ impl Logger {
     }
 
     pub fn output_logs(&self, s: &mut String) {
-        for (k, v) in &self.data.tags {
-            eprintln!("lb: {}, begin: {}, end: {}, size: {}", k, v.begin, v.end, v.size);
-        }
+        // for (k, v) in &self.data.tags {
+        //     eprintln!("lb: {}, begin: {}, end: {}, size: {}", k, v.begin, v.end, v.size);
+        // }
+        // for cond in &self.data.cond_list {
+        //     eprintln!("{:?}", cond);
+        // }
+
         // output：(lb1，lb2, field, remarks)
         // remarks: Enum's candidate; Constraints's op; offset's absolute/relatively
         let mut count = 0;
@@ -181,10 +185,18 @@ impl Logger {
                 s.push_str(&format!("{}\"num\": {},\n", blank2, value.len()));
 
                 s.push_str(&format!("{}\"candidates\": {{\n", blank2));
-                for i in 0..value.len()-1 {
-                    s.push_str(&format!("{}\"{}\": {:02X?},\n", blank3, i, value[i]));
+                for i in 0..value.len() {
+                    s.push_str(&format!("{}\"{}\": \"", blank3, i));
+                    for cand in value[i].clone() {
+                        s.push_str(&format!("{:02X}, ", cand));
+                    }
+                    s.pop();
+                    s.pop();
+                    s.push_str(&format!("\",\n"));
                 }
-                s.push_str(&format!("{}\"{}\": {:02X?}\n", blank3, value.len()-1, value[value.len()-1]));
+                s.pop();
+                s.pop();
+                s.push('\n');
                 s.push_str(&format!("{}}}\n", blank2));
                 s.push_str(&format!("{}}},\n", blank));
     
@@ -205,7 +217,7 @@ impl Logger {
                         
                         s.push_str(&format!("{}\"target\": {{\n", blank2));
                         s.push_str(&format!("{}\"{}\": {},\n", blank3, start, field2.begin));
-                        s.push_str(&format!("{}\"{}\": {}\n", blank3, start, field2.end));
+                        s.push_str(&format!("{}\"{}\": {}\n", blank3, end, field2.end));
                         s.push_str(&format!("{}}}\n", blank2));
                         s.push_str(&format!("{}}},\n", blank));
     

@@ -866,7 +866,7 @@ impl ObjectStack {
                 // eprintln!("hash {} pop_obj call construct_tree", hash);
                 loop_handlers::ObjectStack::construct_tree(&mut list);
                 if list.len() == 1 {
-                for (key,value) in &top_obj.length_candidates {
+                for (key, value) in &top_obj.length_candidates {
                     let tmp_field = Offset{begin: 0, end: 0, size: 0};
                     let size = loop_handlers::ObjectStack::access_check(*key as u64, tmp_field);
                     
@@ -901,7 +901,7 @@ impl ObjectStack {
         ttsg: &TaintSeg,
         depth: usize,
         is_last: bool,
-        father_begin: u32,
+        _father_begin: u32,
     ){
         // let father_begin = 0;
         let blank = "  ".repeat(depth);
@@ -913,18 +913,18 @@ impl ObjectStack {
         s.push_str(&format!("{}\"{:016X}\":\n", blank, ttsg.lb));
         s.push_str(&format!("{}{{\n",blank));
         //need check lb
-        s.push_str(&format!("{}\"{}\": {},\n",blank2, start, ttsg.begin - father_begin)); //    "start": 0,
+        s.push_str(&format!("{}\"{}\": {},\n", blank2, start, ttsg.begin)); //    "start": 0,
         if ttsg.son.is_none() {
-            s.push_str(&format!("{}\"{}\": {}\n",blank2, end, ttsg.end - father_begin));
+            s.push_str(&format!("{}\"{}\": {}\n", blank2, end, ttsg.end));
             if is_last {
-                s.push_str(&format!("{}}}\n",blank));
+                s.push_str(&format!("{}}}\n", blank));
             }
             else {
-                s.push_str(&format!("{}}},\n",blank));
+                s.push_str(&format!("{}}},\n", blank));
             }
             return;
         }
-        s.push_str(&format!("{}\"{}\": {},\n",blank2, end, ttsg.end - father_begin));     //    "end": 8,
+        s.push_str(&format!("{}\"{}\": {},\n",blank2, end, ttsg.end));     //    "end": 8,
         let ttsg_sons = ttsg.son.as_ref().unwrap();
         s.push_str(&format!("{}\"{}\": {{\n",blank2, str_son)); 
         let mut fake_seg = TaintSeg{
