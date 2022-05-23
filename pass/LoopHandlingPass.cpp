@@ -490,6 +490,14 @@ void LoopHandlingPass::visitCallInst(Instruction *Inst) {
   CallInst *Caller = dyn_cast<CallInst>(Inst);
   Function *Callee = Caller->getCalledFunction();
 
+  //Handle indirect call
+  if(!Callee){
+    visitExploitation(Inst);
+    u32 hFunc = hashName(Caller->getName());
+    processCallInst(Inst, hFunc);
+    return;
+  }
+
   if (!Callee || isa<InlineAsm>(Caller->getCalledValue())) {
     return;
   }
