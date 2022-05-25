@@ -20,6 +20,10 @@ lazy_static! {
     pub static ref LC: Mutex<Option<Logger>> = Mutex::new(Some(Logger::new()));
 }
 
+// lazy_static! {
+//     pub static ref CT: Mutex<Option<Vec<Offset>>> = Mutex::new(Some(Vec::new()));
+// }
+
 // Loop & Function labels. 
 #[derive(Debug, Clone)]
 pub struct ObjectLabels {
@@ -463,7 +467,7 @@ impl ObjectStack {
                         cur_ts = list[i].clone();
                         loop_handlers::ObjectStack::insert_node(&mut cur_ts, prev_ts);
                     },
-                    SegRelation::RightConnect => {
+                    | SegRelation::RightConnect | SegRelation::Disjoint => {
                         eprintln!("RightConnect: cur_ts: {{lb: {:016X}, begin: {}, end: {}, son_is_none: {}}}, list[i]: {{lb: {:016X}, begin: {}, end: {}, son_is_none: {}}}", cur_ts.lb, cur_ts.begin, cur_ts.end, cur_ts.son.is_none(), list[i].lb, list[i].begin, list[i].end, list[i].son.is_none());
                         let tmp_field = Offset{begin: 0, end: 0, size: 0};
                         if loop_handlers::ObjectStack::access_check(cur_ts.lb as u64, tmp_field) != 0 {
@@ -471,7 +475,7 @@ impl ObjectStack {
                             cur_ts = none_ts.clone();
                             cur_ts.begin = prev_ts.begin;
                             cur_ts.end = list[i].end;
-                            //println!("prev_ts: {{begin: {}, end: {}, son_is_none: {}}}", prev_ts.begin, prev_ts.end, prev_ts.son.is_none());
+                            println!("prev_ts: {{begin: {}, end: {}, son_is_none: {}}}", prev_ts.begin, prev_ts.end, prev_ts.son.is_none());
                             if let Some(ref mut son) = cur_ts.son {
                                 son.push(prev_ts);
                                 son.push(list[i].clone());
@@ -622,16 +626,18 @@ impl ObjectStack {
 
                         
                     },
-                    SegRelation::Disjoint => {
-                        eprintln!("Disjoint: cur_ts: {{lb: {:016X}, begin: {}, end: {}, son_is_none: {}}}, list[i]: {{lb: {:016X}, begin: {}, end: {}, son_is_none: {}}}", cur_ts.lb, cur_ts.begin, cur_ts.end, cur_ts.son.is_none(), list[i].lb, list[i].begin, list[i].end, list[i].son.is_none());
-                        new_list.push(cur_ts);
-                        cur_ts = list[i].clone();
-                    },
+                    // SegRelation::Disjoint => {
+                    //     eprintln!("Disjoint: cur_ts: {{lb: {:016X}, begin: {}, end: {}, son_is_none: {}}}, list[i]: {{lb: {:016X}, begin: {}, end: {}, son_is_none: {}}}", cur_ts.lb, cur_ts.begin, cur_ts.end, cur_ts.son.is_none(), list[i].lb, list[i].begin, list[i].end, list[i].son.is_none());
+                    //     new_list.push(cur_ts);
+                    //     cur_ts = list[i].clone();
+                    // },
                     _ => {},
                 }
             }
         }
         if cur_ts != none_ts {
+            let lb_filed = Offset::new(cur_ts.begin, cur_ts.end, cur_ts.end - cur_ts.begin);
+            loop_handlers::ObjectStack::access_check(cur_ts.lb, lb_filed);
             new_list.push(cur_ts);
         }
         list.clear();
@@ -675,11 +681,10 @@ impl ObjectStack {
         &mut self,
         lb: u32,
     ) -> u32 {
-        // let saved = loop_handlers::ObjectStack::access_check(lb as u64, 0);
-        // if saved != 0 {
-        //     // eprintln!("lb {} have already saved {}", lb, saved);
-        //     return saved;
-        // }
+        let saved = loop_handlers::ObjectStack::access_check(lb as u64, Offset::new(0, 0, 0));
+        if saved != 0 {
+            return saved;
+        }
         let mut set_list = tag_set_wrap::tag_set_find(lb as usize);
 
         // if set_list.len() > 0 {
@@ -909,7 +914,7 @@ impl ObjectStack {
         let start = "start";
         let end = "end";
         // let field = "type";
-        let str_son = "son";
+        let str_son = "child";
         s.push_str(&format!("{}\"{:016X}\":\n", blank, ttsg.lb));
         s.push_str(&format!("{}{{\n",blank));
         //need check lb

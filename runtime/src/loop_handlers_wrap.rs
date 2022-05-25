@@ -132,7 +132,6 @@ pub extern "C" fn __dfsw___chunk_pop_obj(
     } else {
         panic!("POP ERROR!");
     }
-
 }
 
 #[no_mangle]
