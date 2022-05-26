@@ -149,7 +149,7 @@ pub extern "C" fn __chunk_set_input_file_name(
 ){
     let input_file = match env::var("CHUNK_CURRENT_INPUT_FILE") {
         Ok(path) => {
-            println!("CHUNK_CURRENT_INPUT_FILE: {:?}",path);
+            eprintln!("CHUNK_CURRENT_INPUT_FILE: {:?}", path);
             PathBuf::from(path)
         },
         Err(_) => panic!("set input_name error"),
@@ -160,6 +160,7 @@ pub extern "C" fn __chunk_set_input_file_name(
     };
     let mut osl = OS.lock().unwrap();
     if let Some(ref mut os) = *osl {
+        // set json file path
         let mut json_file = input_file.clone();
         let json_name = &format!("{}{}", file_name, ".json");
         let json_name_os : &OsStr = OsStr::new(json_name);
@@ -168,6 +169,13 @@ pub extern "C" fn __chunk_set_input_file_name(
         os.set_input_file_name(json_file);
         eprintln!("CHUNK FILE SIZE: {}", fsize);
         os.set_input_file_size(fsize);
+
+        // set log file path
+        let mut log_file = input_file.clone();
+        let log_name = &format!("{}{}", file_name, ".log");
+        let log_name_os = OsStr::new(log_name);
+        log_file.set_file_name(log_name_os);
+        os.set_log_file_name(log_file);
     } 
     let mut lcl = LC.lock().expect("Could not lock LC.");
     if let Some(ref mut lc) = *lcl {
@@ -236,6 +244,7 @@ pub extern "C" fn __dfsw___chunk_trace_cmp_tt(
             if lb2 != 0 {
                 os.maybe_length(lb2);
             }
+            os.count_cmp_num();
         }
     }
     infer_shape(lb1, size);
@@ -250,6 +259,7 @@ pub extern "C" fn __dfsw___chunk_trace_cmp_tt(
     if op == 32 || op == 33 {
         if lb1 != 0 && lb2 == 0 && is_cnst2 == 1 {
             //log enum
+            
             if arg2 == 0 {
                 return;
             }
@@ -339,6 +349,7 @@ pub extern "C" fn __dfsw___chunk_trace_switch_tt(
         if real_size > size {
             real_size = size;
         }
+        os.count_switch_num();
     }
     for arg in sw_args {
         let vec8 = arg.to_le_bytes().to_vec();
@@ -385,8 +396,8 @@ pub extern "C" fn __dfsw___chunk_trace_cmpfn_tt(
         return;
     }
 
-    eprintln!("chunk_trace_cmpfn_tt");
-
+    // eprintln!("chunk_trace_cmpfn_tt");
+    
     let arg1 = unsafe { slice::from_raw_parts(parg1 as *mut u8, arglen1) }.to_vec();
     let arg2 = unsafe { slice::from_raw_parts(parg2 as *mut u8, arglen2) }.to_vec();
     if lb1 > 0  && lb2 > 0 {

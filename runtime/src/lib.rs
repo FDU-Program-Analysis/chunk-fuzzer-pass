@@ -7,6 +7,7 @@ pub mod tag_set_wrap;
 // pub mod track;
 pub mod loop_handlers;
 pub mod loop_handlers_wrap;
+pub mod stats;
 
 use crate::logger::Logger;
 pub use crate::{tag_set::TagSet};

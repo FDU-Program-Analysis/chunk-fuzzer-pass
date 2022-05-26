@@ -2,7 +2,7 @@ use super::*;
 use angora_common::{tag::*, cond_stmt_base::*, log_data::*};
 // use itertools::Itertools;
 use lazy_static::lazy_static;
-use crate::{tag_set_wrap};
+use crate::{tag_set_wrap, stats::Stats};
 use std::{
     fs::File, 
     io::prelude::*, 
@@ -10,6 +10,7 @@ use std::{
     sync::Mutex, 
     time::*,
     path:: PathBuf,
+    env,
 };
 use std::collections::HashMap;
 use rand::Rng;
@@ -55,17 +56,31 @@ impl ObjectLabels {
 
 #[derive(Debug)]
 pub struct ObjectStack {
-    objs: Vec<ObjectLabels>,
-    cur_id: usize,
-    fd: Option<File>,
-    access_counter: u32,
-    fsize: u32,
+    objs: Vec<ObjectLabels>, // object label, representing tree node
+    cur_id: usize, // stack cur pointer
+    fd: Option<File>, // json file
+    access_counter: u32, // counter for load access operation
+    fsize: u32, // seed file size
+    use_log: bool, // flag indicating whether to use log
+    stats: Stats, // Statistical data for log
 }
 
 impl ObjectStack {
     pub fn new() -> Self {
         let mut objs = Vec::with_capacity(STACK_MAX);
         objs.push(ObjectLabels::new(false, 0)); //ROOT
+        let use_log = match env::var("CHUNKFUZZER_LOG") {
+            Ok(value) => {
+                let mut ret = false;
+                if value == "1" {
+                    ret = true;
+                }
+                ret
+            }
+            Err(_) => { false }
+        };
+        println!("CHUNKFUZZER_LOG: {}", use_log);
+        let stats = Stats::new();
         Self { 
         objs ,
         cur_id: 0,
@@ -73,6 +88,8 @@ impl ObjectStack {
         fd: None,
         fsize: 0,
         access_counter: 1,
+        use_log,
+        stats,
         }
     }
 
@@ -86,6 +103,11 @@ impl ObjectStack {
         if len < STACK_MAX {
             self.objs.push(ObjectLabels::new(is_loop, hash));
             self.cur_id += 1;
+            if is_loop {
+                self.stats.num_loop += 1;
+            } else {
+                self.stats.num_func += 1;
+            }
             eprintln!("new pbj push cur id of the stack is {}", self.cur_id);
             return;
         }
@@ -699,6 +721,7 @@ impl ObjectStack {
         }
         if list.len() != 0 {
             eprintln!("load: lb {}, {:?}", lb, list);
+            self.stats.num_load += 1;            
             let size = list[0].end - list[0].begin;
             let lb_filed = Offset::new(list[0].begin, list[0].end, size);
             eprintln!("get load label call insert label");
@@ -1006,6 +1029,21 @@ impl ObjectStack {
         self.fsize = fsize;
     }
 
+    pub fn set_log_file_name(
+        &mut self,
+        log_path: PathBuf,
+    ) {
+        self.stats.create_log_file(log_path);
+    }
+
+    pub fn count_cmp_num(&mut self) {
+        self.stats.num_cmp += 1;
+    }
+
+    pub fn count_switch_num(&mut self) {
+        self.stats.num_switch += 1;
+    }
+
     pub fn fini(
         &mut self,
     ) {
@@ -1044,6 +1082,7 @@ impl ObjectStack {
             let sum_clone = self.objs[self.cur_id].sum.clone();
             let end = sum_clone[0].end;
             if end < self.fsize {
+                self.stats.is_complete = false;
                 let remain_sum = TaintSeg {
                     lb: rand::thread_rng().gen_range(0..0x10000000)+0x300000000,
                     begin: end,
@@ -1058,6 +1097,7 @@ impl ObjectStack {
             let sum_clone = self.objs[self.cur_id].sum.clone();
             let end = sum_clone[sum_clone.len() - 1].end;
             if end < self.fsize {
+                self.stats.is_complete = false;
                 let remain_sum = TaintSeg {
                     lb: rand::thread_rng().gen_range(0..0x10000000)+0x300000000,
                     begin: end,
@@ -1118,6 +1158,11 @@ impl ObjectStack {
             let mut json_file = File::create(json_name).expect("Unable to create log file");
             json_file.write_all(s.as_bytes()).expect("Unable to write file");
         }
+
+        if self.use_log {
+            self.stats.output_logs();            
+        }
+
     }
 }
 
