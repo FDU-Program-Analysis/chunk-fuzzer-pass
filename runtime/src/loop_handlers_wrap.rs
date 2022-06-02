@@ -126,13 +126,12 @@ pub extern "C" fn __dfsw___chunk_pop_obj(
     eprintln!("pop obj: {}", loop_hash);
     let mut osl = OS.lock().unwrap();
     if let Some(ref mut os) = *osl {
-        //println!("call pop_obj and hash is {}", loop_hash);
+        println!("call pop_obj and hash is {}", loop_hash);
         os.pop_obj(loop_hash);
-         true
+        true
     } else {
         panic!("POP ERROR!");
     }
-
 }
 
 #[no_mangle]

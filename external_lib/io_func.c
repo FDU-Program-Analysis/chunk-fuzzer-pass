@@ -421,7 +421,6 @@ __dfsw_fgets(char *str, int count, FILE *fd, dfsan_label str_label,
   return ret;
 }
 
-/*
 __attribute__((visibility("default"))) char *
 __dfsw_fgets_unlocked(char *str, int count, FILE *fd, dfsan_label str_label,
                       dfsan_label count_label, dfsan_label fd_label,
@@ -441,7 +440,6 @@ __dfsw_fgets_unlocked(char *str, int count, FILE *fd, dfsan_label str_label,
   }
   return ret;
 }
-*/
 
 __attribute__((visibility("default"))) char *
 __dfsw_gets(char *str, dfsan_label str_label, dfsan_label *ret_label) {
