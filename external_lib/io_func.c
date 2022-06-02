@@ -26,12 +26,12 @@
 static int granularity = 1; // byte level
 
 // extern void __angora_track_fini_rs();
-// extern void __chunk_object_stack_fini();
-// extern void __chunk_set_input_file_name(int );
+extern void __chunk_object_stack_fini();
+extern void __chunk_set_input_file_name(int );
 
 __attribute__((destructor(0))) void __angora_track_fini(void) {
   // __angora_track_fini_rs();
-  // __chunk_object_stack_fini();
+  __chunk_object_stack_fini();
 }
 
 #define __angora_get_sp_label __angora_get_len_label
@@ -105,7 +105,7 @@ __dfsw_open(const char *path, int oflags, dfsan_label path_label,
   lseek(fd, 0, SEEK_SET);
   // printf("CHUNK_CURRENT_INPUT_FILE size: %ld\n", fsize);
 
-  //set_input_file_name(fsize);
+  set_input_file_name(fsize);
 
   *ret_label = 0;
   return fd;
@@ -134,7 +134,7 @@ __dfsw_fopen(const char *filename, const char *mode, dfsan_label fn_label,
   fseek(fd, 0, SEEK_SET);
   // printf("CHUNK_CURRENT_INPUT_FILE size: %ld\n", fsize);
 
-  //set_input_file_name(fsize);
+  set_input_file_name(fsize);
 
   *ret_label = 0;
   return fd;
@@ -162,7 +162,7 @@ __dfsw_fopen64(const char *filename, const char *mode, dfsan_label fn_label,
   fseek(fd, 0, SEEK_SET);
   // printf("CHUNK_CURRENT_INPUT_FILE size: %ld\n", fsize);
 
-  //set_input_file_name(fsize);
+  set_input_file_name(fsize);
 
   *ret_label = 0;
   return fd;
