@@ -112,7 +112,6 @@ impl ObjectStack {
             } else {
                 self.stats.num_func += 1;
             }
-            eprintln!("new pbj push cur id of the stack is {}", self.cur_id);
             return;
         }
         else {
@@ -185,23 +184,15 @@ impl ObjectStack {
         ancestor: &mut TaintSeg,
         node: TaintSeg,
     ) {
-        // eprintln!("[insert node]");
-        // eprint!("ancestor: ");
-        // eprintln!("top lb: {:016X}, begin: {}, end: {}", ancestor.lb, ancestor.begin, ancestor.end);
-        // eprint!("node: ");
-        // eprintln!("node lb: {:016X}, begin: {}, end: {}, son_is_none: {}", node.lb, node.begin, node.end, node.son.is_none());
-
         if let Some(ref mut son) = ancestor.son {
             let son_len = son.len();
             for i in 0 .. son_len {
                 match loop_handlers::ObjectStack::seg_relation(&son[i], &node) {
                     SegRelation::Father => {
-                        // println!("insert_node Father: son[i]: {{lb: {:016X}, begin: {}, end:{}, son_is_none: {}}}, node: {{lb: {:016X}, begin: {}, end:{}, son_is_none: {}}}", son[i].lb, son[i].begin, son[i].end, son[i].son.is_none(), node.lb, node.begin, node.end, node.son.is_none());
                         loop_handlers::ObjectStack::insert_node(&mut son[i], node);
                         return;
                     },
                     SegRelation::Same => {
-                        // println!("insert_node Same: son[i]: {{lb: {:016X}, begin: {}, end:{}, son_is_none: {}}}, node: {{lb: {:016X}, begin: {}, end:{}, son_is_none: {}}}", son[i].lb, son[i].begin, son[i].end, son[i].son.is_none(), node.lb, node.begin, node.end, node.son.is_none());
                         son[i].lb = min(son[i].lb, node.lb);
                         if let Some(node_son) = node.son {
                             for son_i in node_son {
@@ -213,8 +204,6 @@ impl ObjectStack {
                     _ => {},
                 }
             }
-
-            // eprintln!("find overlap range");
             let mut overlap_start = usize::MAX;
             let mut overlap_end = 0;
             for i in 0 .. son_len {
@@ -242,7 +231,6 @@ impl ObjectStack {
                     overlap_vec.push(son.remove(overlap_start));
                 }
                 overlap_vec.push(node);
-                // eprintln!("insert_node call construct_tree");
                 loop_handlers::ObjectStack::construct_tree(&mut overlap_vec);
                 son.append(&mut overlap_vec);
                 son.sort_by(|a, b| {
@@ -255,7 +243,6 @@ impl ObjectStack {
             return;
         }
         else {
-            // eprintln!("ancestor have no son, insert node directly");
             ancestor.son = Some(vec![node]);
         }
     }
@@ -265,37 +252,28 @@ impl ObjectStack {
         a: &TaintSeg,
         b: &TaintSeg,
     )-> SegRelation {
-        // eprintln!("[seg_relation]");
         if a.begin == b.begin && a.end == b.end {
-            // eprintln!("Same");
             SegRelation::Same
         }
         else if a.begin <= b.begin && a.end >= b.end {
-            // eprintln!("Father");
             SegRelation::Father
         }
         else if a.begin >= b.begin && a.end <= b.end {
-            // eprintln!("Son");
             SegRelation::Son
         }
         else if a.begin == b.end {
-            // eprintln!("LeftConnect");
             SegRelation::LeftConnect
         }
         else if a.end == b.begin {
-            // eprintln!("RightConnect");
             SegRelation::RightConnect
         }
         else if a.begin > b.begin && a.begin < b.end {
-            // eprintln!("LeftOverlap");
             SegRelation::LeftOverlap
         }
         else if a.end > b.begin && a.end < b.end {
-            // eprintln!("RightOverlap");
             SegRelation::RightOverlap
         }
         else {
-            // eprintln!("Disjoint");
             SegRelation::Disjoint
         }
     }
@@ -314,16 +292,9 @@ impl ObjectStack {
     pub fn handle_overlap (
         list : &mut Vec<TaintSeg>,
     ) {
-        // eprintln!("[handle_overlap]");
         if list.len() <= 1 {
             return;
         }
-
-        // eprintln!("before handle overlap list: ");
-        // for i in 0 .. list.len() {
-        //     eprintln!("lb: {:016X}, begin: {}, end:{}, son_is_none: {}", list[i].lb, list[i].begin, list[i].end, list[i].son.is_none());
-        // }
-
         // extract all non-leaf node and fake node into retain list
         let mut retain_list = vec![];
         for i in 0 .. list.len() {
@@ -407,11 +378,6 @@ impl ObjectStack {
         loop_handlers::ObjectStack::erase_lb_wrapper(&erase_lbs);
         list.clear();
         list.append(&mut retain_list);
-
-        // eprintln!("after handle overlap list: ");
-        // for i in 0 .. list.len() {
-        //     eprintln!("lb: {:016X}, begin: {}, end:{}, son_is_none: {}", list[i].lb, list[i].begin, list[i].end, list[i].son.is_none());
-        // }
     }
 
     pub fn remove_son(
@@ -437,9 +403,7 @@ impl ObjectStack {
     pub fn construct_tree(
         mut list : &mut Vec<TaintSeg>,
     ) {
-        // eprintln!("[construct_tree]:");
         loop_handlers::ObjectStack::handle_overlap(&mut list);
-        //println!("list len = {}", list.len());
         if list.len() <= 1 {
             return;
         }
@@ -449,10 +413,6 @@ impl ObjectStack {
                 other => other,
             }
         });
-        eprintln!("vec to minimize: ");
-        for i in list.clone() {
-            eprintln!("lb: {:016X}, begin: {}, end: {}, son_is_none: {}", i.lb, i.begin, i.end, i.son.is_none());
-        }
 
         let mut new_list = vec![];
         let none_ts = TaintSeg{
@@ -470,7 +430,6 @@ impl ObjectStack {
             else {
                 match loop_handlers::ObjectStack::seg_relation(&cur_ts, &list[i]) {
                     SegRelation::Same => {
-                        eprintln!("Same: cur_ts: {{lb: {:016X}, begin: {}, end: {}, son_is_none: {}}}, list[i]: {{lb: {:016X}, begin: {}, end: {}, son_is_none: {}}}", cur_ts.lb, cur_ts.begin, cur_ts.end, cur_ts.son.is_none(), list[i].lb, list[i].begin, list[i].end, list[i].son.is_none());
                         cur_ts.lb = min(cur_ts.lb, list[i].lb);
                         if ! list[i].son.is_none() {
                             let tmp = list[i].clone().son.unwrap();
@@ -480,24 +439,20 @@ impl ObjectStack {
                         }
                     },
                     SegRelation::Father => {
-                        eprintln!("Father: cur_ts: {{lb: {:016X}, begin: {}, end: {}, son_is_none: {}}}, list[i]: {{lb: {:016X}, begin: {}, end: {}, son_is_none: {}}}", cur_ts.lb, cur_ts.begin, cur_ts.end, cur_ts.son.is_none(), list[i].lb, list[i].begin, list[i].end, list[i].son.is_none());
                         loop_handlers::ObjectStack::insert_node(&mut cur_ts, list[i].clone())
                     },
                     SegRelation::Son => {
-                        eprintln!("Son: cur_ts: {{lb: {:016X}, begin: {}, end: {}, son_is_none: {}}}, list[i]: {{lb: {:016X}, begin: {}, end: {}, son_is_none: {}}}", cur_ts.lb, cur_ts.begin, cur_ts.end, cur_ts.son.is_none(), list[i].lb, list[i].begin, list[i].end, list[i].son.is_none());
                         let prev_ts = cur_ts;
                         cur_ts = list[i].clone();
                         loop_handlers::ObjectStack::insert_node(&mut cur_ts, prev_ts);
                     },
                     | SegRelation::RightConnect | SegRelation::Disjoint => {
-                        eprintln!("RightConnect: cur_ts: {{lb: {:016X}, begin: {}, end: {}, son_is_none: {}}}, list[i]: {{lb: {:016X}, begin: {}, end: {}, son_is_none: {}}}", cur_ts.lb, cur_ts.begin, cur_ts.end, cur_ts.son.is_none(), list[i].lb, list[i].begin, list[i].end, list[i].son.is_none());
                         let tmp_field = Offset{begin: 0, end: 0, size: 0};
                         if loop_handlers::ObjectStack::access_check(cur_ts.lb as u64, tmp_field) != 0 {
                             let prev_ts = cur_ts.clone();
                             cur_ts = none_ts.clone();
                             cur_ts.begin = prev_ts.begin;
                             cur_ts.end = list[i].end;
-                            println!("prev_ts: {{begin: {}, end: {}, son_is_none: {}}}", prev_ts.begin, prev_ts.end, prev_ts.son.is_none());
                             if let Some(ref mut son) = cur_ts.son {
                                 son.push(prev_ts);
                                 son.push(list[i].clone());
@@ -518,7 +473,6 @@ impl ObjectStack {
                         }
                     },
                     SegRelation::RightOverlap => {
-                        eprintln!("RightOverlap: cur_ts: {{lb: {:016X}, begin: {}, end:{}, son_is_none: {}}}, list[i]: {{lb: {:016X}, begin: {}, end:{}, son_is_none: {}}}", cur_ts.lb, cur_ts.begin, cur_ts.end, cur_ts.son.is_none(), list[i].lb, list[i].begin, list[i].end, list[i].son.is_none());
                         new_list.push(cur_ts);
                         cur_ts = list[i].clone();
                                
@@ -665,16 +619,6 @@ impl ObjectStack {
         list.clear();
         list.append(&mut new_list);
         // loop_handlers::ObjectStack::access_check(list[0].lb, list[0].end - list[0].begin);
-
-        eprintln!("minimized: ");
-        for i in list.clone() {
-            eprintln!("top lb: {:016X}, begin: {}, end: {}, son_is_none: {}", i.lb, i.begin, i.end, i.son.is_none());
-            if let Some(son) = i.clone().son {
-                for j in son.clone() {
-                    eprintln!("son lb: {:016X}, begin: {}, end: {}, son_is_none: {}", j.lb, j.begin, j.end, j.son.is_none());
-                }   
-            }
-        }
     }
 
     // if size == 0 ,search lb in LC, return 0 if not found
@@ -708,28 +652,20 @@ impl ObjectStack {
             return saved;
         }
         let mut set_list = tag_set_wrap::tag_set_find(lb as usize);
-
-        // if set_list.len() > 0 {
-        //     println!("prelist: {:?}", set_list);
-        // }
-        
         let mut list = self.seg_tag_2_taint_tag(lb as u64, &mut set_list);
 
         if list.len() > 1 {
             // if the label number > 1, it means that there are multi byte of input with constraint
             let mut lcl = LC.lock().unwrap();
             if let Some(ref mut lc) = *lcl {
-                eprintln!("save linear constraint lb: {}", lb);
                 lc.save_linear_constraint(lb)
             }
             return 0;
         }
         if list.len() != 0 {
-            eprintln!("load: lb {}, {:?}", lb, list);
             self.stats.num_load += 1;            
             let size = list[0].end - list[0].begin;
             let lb_filed = Offset::new(list[0].begin, list[0].end, size);
-            eprintln!("get load label call insert label");
             self.insert_labels(&mut list);
             loop_handlers::ObjectStack::access_check(lb as u64, lb_filed);
             return size;
@@ -745,7 +681,6 @@ impl ObjectStack {
         list :&mut Vec<TaintSeg>,
     ) {
         if self.objs[self.cur_id].is_loop {
-            eprintln!("loop insert labels");
             if self.objs[self.cur_id].cur_iter.is_none() {
                 panic!("[ERR]: Loop object doesn't have cur_iter");
             }
@@ -756,28 +691,17 @@ impl ObjectStack {
                         continue;
                     }
                     else {
-                        eprintln!("[insert label] {:?}", i);
                         tmp_iter.push(i);
-                        eprintln!("current list:");
-                        for j in tmp_iter.clone() {
-                            eprintln!("{:?}", j);
-                        }
                     }
                 }
             }
         } else {
-            eprintln!("function insert labels");
             for i in list.clone() {
                 if self.objs[self.cur_id].sum.contains(&i) {
                     continue;
                 }
                 else {
-                    eprintln!("[insert label] {:?}", i);
                     self.objs[self.cur_id].sum.push(i);
-                    eprintln!("current list:");
-                    for j in self.objs[self.cur_id].sum.clone() {
-                        eprintln!("{:?}", j);
-                    }
             }
             }
         }
@@ -790,16 +714,13 @@ impl ObjectStack {
             panic!("insert_iter_into_sum but cur_iter is none!");
         }
         let tmp_iter = self.objs[self.cur_id].cur_iter.as_ref().unwrap().clone();
-        // eprintln!("insert_iter_into_sum");
         // let index = self.objs[self.cur_id].cur_iter_num - 1;
         // self.objs[self.cur_id].sum.insert(index, tmp_iter.to_vec());
         for i in tmp_iter.clone() {
             if self.objs[self.cur_id].sum.contains(&i) {
-                // eprintln!("{:?} already in sum", i);
                 continue;
             }
             else {
-                // eprintln!("push {:?} in sum", i);
                 self.objs[self.cur_id].sum.push(i);
             }
         }
@@ -813,17 +734,10 @@ impl ObjectStack {
         if self.objs[self.cur_id].is_loop {
             if self.objs[self.cur_id].cur_iter.is_some() {
                 let mut tmp_iter = self.objs[self.cur_id].cur_iter.as_mut().unwrap();
-                // eprintln!("dump_cur_iter call construct_tree");
                 loop_handlers::ObjectStack::construct_tree(&mut tmp_iter);
-                // eprintln!("after dump_cur_iter call construct_tree");
                 self.insert_iter_into_sum();
                 self.objs[self.cur_id].cur_iter.as_mut().unwrap().clear();
                 self.objs[self.cur_id].cur_iter_num = loop_cnt;
-
-                // if self.objs[self.cur_id].sum.len() > 0{
-                //     println!("dump_cur_iter: {:?}",self.objs[self.cur_id].sum);
-                // }
-
             }
             else {
                 panic!("[ERR]: Loop with wrong structure!! #[ERR]");
@@ -844,13 +758,8 @@ impl ObjectStack {
         let top = self.objs.pop();
         if top.is_some() {
             let top_obj = top.unwrap();
-
-            // if top_obj.sum.len() > 0 {
-            //     println!("pop obj: {:?}", top_obj.sum);
-            // }
             
             if hash != 0 && top_obj.hash != hash {
-                // eprintln!("stack len: {}, cur_id: {}", self.objs.len(), self.cur_id);                
                 let mut jmp_func = 0;
                 let len = self.objs.len();
                 for i in 0..len {
@@ -858,7 +767,6 @@ impl ObjectStack {
                         jmp_func = i;
                         break;
                     }
-                    // eprintln!("stack id: {}, hash: {}", i, self.objs[i].hash);
                 }
 
                 if jmp_func != 0 {
@@ -868,7 +776,6 @@ impl ObjectStack {
                     self.insert_labels(&mut cur_list);
 
                     while self.cur_id >= jmp_func {
-                        // eprintln!("stack pop cur id {}, label: {:?}", self.cur_id, self.objs[self.cur_id]);
                         let obj = self.objs.pop();
                         if obj.is_some() {
                             let real_obj = obj.unwrap();
@@ -877,21 +784,13 @@ impl ObjectStack {
                             self.cur_id -= 1;
                             self.insert_labels(&mut list);
                         }
-                    }
-
-                    // let len = self.objs.len();
-                    // for i in 0..len {
-                    //     eprintln!("stack id: {}, hash: {}, label {:?}", i, self.objs[i].hash, self.objs[i]);
-                    // }
-                    // eprintln!("cur_id is {}", self.cur_id);
-                    
+                    }                    
                 } else {
                     panic!("[ERR] :pop error! incorrect Hash {} #[ERR]", top_obj.hash);
                 }
             }
             else {
                 let mut list = top_obj.sum;
-                // eprintln!("hash {} pop_obj call construct_tree", hash);
                 loop_handlers::ObjectStack::construct_tree(&mut list);
                 if list.len() == 1 {
                 for (key, value) in &top_obj.length_candidates {
@@ -899,7 +798,6 @@ impl ObjectStack {
                     let size = loop_handlers::ObjectStack::access_check(*key as u64, tmp_field);
                     
                     if size != 0 && *value == top_obj.cur_iter_num {
-                        // println!("loop_hash:{}, iter_num:{}, key: {}, value:{}, size: {}", hash, top_obj.cur_iter_num ,*key, *value, size);
                         let cond = CondStmtBase {
                             op: 0,
                             size,
@@ -915,8 +813,6 @@ impl ObjectStack {
                 }
                 }
                 self.cur_id -= 1;
-                eprintln!("after pop stack cur_id {}", self.cur_id);
-                // eprintln!("pop obj call insert labels");
                 self.insert_labels(&mut list);
             }
         } else {
@@ -1017,7 +913,6 @@ impl ObjectStack {
         if self.fd.is_some() {
             return;
         }
-        //println!("json_name: {:?}", json_name);
         let json_file = match File::create(json_name) {
             Ok(a) => a,
             Err(e) => {
@@ -1052,8 +947,6 @@ impl ObjectStack {
     pub fn fini(
         &mut self,
     ) {
-        eprintln!("fini: cur_id: {}, objs:{:?}", self.cur_id, self.objs);
-        eprintln!("file size: {}", self.fsize);
         while self.cur_id != 0 {
             if self.objs[self.cur_id].is_loop {
                 self.dump_cur_iter(0);
@@ -1061,27 +954,7 @@ impl ObjectStack {
             self.pop_obj(0);
         }
         let mut s = String::new();
-        // eprintln!("Before fini call construct_tree");
-        // for i in &self.objs[self.cur_id].sum{
-        //     eprintln!("top lb: {:016X}, begin: {}, end:{}, son_is_none: {}", i.lb, i.begin, i.end, i.son.is_none());
-        //     if let Some(son) = i.clone().son {
-        //         for j in son.clone() {
-        //             eprintln!("son lb: {:016X}, begin: {}, end:{}, son_is_none: {}", j.lb, j.begin, j.end, j.son.is_none());
-        //         }   
-        //     }
-        // }
-
         loop_handlers::ObjectStack::construct_tree(&mut self.objs[self.cur_id].sum);
-
-        // eprintln!("After fini call construct_tree");
-        // for i in &self.objs[self.cur_id].sum{
-        //     eprintln!("top lb: {:016X}, begin: {}, end:{}, son_is_none: {}", i.lb, i.begin, i.end, i.son.is_none());
-        //     if let Some(son) = i.clone().son {
-        //         for j in son.clone() {
-        //             eprintln!("son lb: {:016X}, begin: {}, end:{}, son_is_none: {}", j.lb, j.begin, j.end, j.son.is_none());
-        //         }   
-        //     }
-        // }
 
         if self.objs[self.cur_id].sum.len() == 1 {
             let sum_clone = self.objs[self.cur_id].sum.clone();
@@ -1125,12 +998,6 @@ impl ObjectStack {
                 cntr: self.access_counter,
             };
             self.objs[self.cur_id].sum = vec![new_sum];
-        }
-
-        eprintln!("finial vec:");
-        for i in self.objs[self.cur_id].sum.clone() {
-            print_son_node(i);
-            //eprintln!("lb: {:016X}, begin: {}, end: {}, son_is_none: {}", i.lb, i.begin, i.end, i.son.is_none());
         }
         
         s.push_str(&format!("{{\n"));
@@ -1224,7 +1091,6 @@ impl CmpLabelsStack {
         if len < STACK_MAX {
             self.labels.push(CompareLabel::new(hash));
             self.cur_id += 1;
-            // eprintln!("push a new compare label {} in stack id {}", hash, self.cur_id);
             return;
         
         } else {
@@ -1243,9 +1109,7 @@ impl CmpLabelsStack {
                 panic!("[ERR] :pop incorrect Hash {}, stack current hash {} #[ERR]", hash, top_label.hash);
             }
 
-            self.cur_id -= 1;
-            eprintln!("pop compare hash {} and stack cur_id is {}", hash, self.cur_id);
-        
+            self.cur_id -= 1;        
         } else {
             panic!("[ERR] :STACK EMPTY! #[ERR]");
         }
@@ -1266,17 +1130,4 @@ pub fn hash_combine(
         }
     }
     seed
-}
-
-pub fn print_son_node(
-    ts: TaintSeg,
-) {
-    eprintln!("lb: {:016X}, begin: {}, end: {}, son_is_none: {}", ts.lb, ts.begin, ts.end, ts.son.is_none());
-    if let Some(son_list) = ts.son {
-        for i in son_list {
-            //eprintln!("lb: {:016X}, begin: {}, end: {}, son_is_none: {}", i.lb, i.begin, i.end, i.son.is_none());
-            print_son_node(i);
-        }
-        eprint!("\n");
-    }
 }
