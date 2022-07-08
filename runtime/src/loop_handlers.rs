@@ -467,7 +467,7 @@ impl ObjectStack {
                         cur_ts = list[i].clone();
                         loop_handlers::ObjectStack::insert_node(&mut cur_ts, prev_ts);
                     },
-                    | SegRelation::RightConnect | SegRelation::Disjoint => {
+                    | SegRelation::RightConnect | SegRelation::RightOverlap | SegRelation::Disjoint => {
                         eprintln!("RightConnect: cur_ts: {{lb: {:016X}, begin: {}, end: {}, son_is_none: {}}}, list[i]: {{lb: {:016X}, begin: {}, end: {}, son_is_none: {}}}", cur_ts.lb, cur_ts.begin, cur_ts.end, cur_ts.son.is_none(), list[i].lb, list[i].begin, list[i].end, list[i].son.is_none());
                         let tmp_field = Offset{begin: 0, end: 0, size: 0};
                         if loop_handlers::ObjectStack::access_check(cur_ts.lb as u64, tmp_field) != 0 {
