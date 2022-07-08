@@ -89,21 +89,22 @@ __dfsw_open(const char *path, int oflags, dfsan_label path_label,
 
   int fd = open(path, oflags, mode);
 
+  if(fd < 0) {
+    *ret_label = 0;
+    return fd;
+  }
+
 #ifdef DEBUG_INFO
   fprintf(stderr, "### open, filename is : %s, fd is %d \n", path, fd);
 #endif
 
-//  if (fd >= 0 && IS_FUZZING_FILE(path)) {
-//    add_fuzzing_fd(fd);
-//  }
+  if (fd >= 0 && IS_FUZZING_FILE(path)) {
+    add_fuzzing_fd(fd);
+  }
 
   setenv("CHUNK_CURRENT_INPUT_FILE", path, 1);
-  // char *strEnv = "";
-  // strEnv = getenv("CHUNK_CURRENT_INPUT_FILE");
-  // printf("CHUNK_CURRENT_INPUT_FILE: %s\n",strEnv);
   int fsize = lseek(fd, 0, SEEK_END);
   lseek(fd, 0, SEEK_SET);
-  // printf("CHUNK_CURRENT_INPUT_FILE size: %ld\n", fsize);
 
   set_input_file_name(fsize);
 
@@ -117,22 +118,22 @@ __dfsw_fopen(const char *filename, const char *mode, dfsan_label fn_label,
 
   FILE *fd = fopen(filename, mode);
 
+  if (!fd) {
+    *ret_label = 0;
+    return fd;
+  }
 #ifdef DEBUG_INFO
   fprintf(stderr, "### fopen, filename is : %s, fd is %p \n", filename, fd);
 #endif
 
-//  if (fd && IS_FUZZING_FILE(filename)) {
-//    add_fuzzing_ffd(fd);
-//  }
+  if (fd && IS_FUZZING_FILE(filename)) {
+    add_fuzzing_ffd(fd);
+  }
   
   setenv("CHUNK_CURRENT_INPUT_FILE", filename, 1);
-  // char *strEnv = "";
-  // strEnv = getenv("CHUNK_CURRENT_INPUT_FILE");
-  // printf("CHUNK_CURRENT_INPUT_FILE: %s\n",strEnv);
   fseek(fd, 0, SEEK_END);
   int fsize = ftell(fd);
   fseek(fd, 0, SEEK_SET);
-  // printf("CHUNK_CURRENT_INPUT_FILE size: %ld\n", fsize);
 
   set_input_file_name(fsize);
 
@@ -143,24 +144,23 @@ __attribute__((visibility("default"))) FILE *
 __dfsw_fopen64(const char *filename, const char *mode, dfsan_label fn_label,
                dfsan_label mode_label, dfsan_label *ret_label) {
   FILE *fd = fopen(filename, mode);
-
+  if(!fd) {
+    *ret_label = 0;
+    return fd;
+  }
 #ifdef DEBUG_INFO
   fprintf(stderr, "### fopen64, filename is : %s, fd is %p \n", filename, fd);
   fflush(stderr);
 #endif
 
-//  if (fd && IS_FUZZING_FILE(filename)) {
-//    add_fuzzing_ffd(fd);
-//  }
-
+  if (fd && IS_FUZZING_FILE(filename)) {
+    add_fuzzing_ffd(fd);
+  }
   setenv("CHUNK_CURRENT_INPUT_FILE", filename, 1);
-  char *strEnv = "";
-  // strEnv = getenv("CHUNK_CURRENT_INPUT_FILE");
-  // printf("CHUNK_CURRENT_INPUT_FILE: %s\n",strEnv);
+
   fseek(fd, 0, SEEK_END);
   int fsize = ftell(fd);
   fseek(fd, 0, SEEK_SET);
-  // printf("CHUNK_CURRENT_INPUT_FILE size: %ld\n", fsize);
 
   set_input_file_name(fsize);
 
@@ -190,9 +190,9 @@ __dfsw_close(int fd, dfsan_label fd_label, dfsan_label *ret_label) {
   fprintf(stderr, "### close, fd is %d , ret is %d \n", fd, ret);
 #endif
 
-//  if (ret == 0 && is_fuzzing_fd(fd)) {
-//    remove_fuzzing_fd(fd);
-//  }
+  if (ret == 0 && is_fuzzing_fd(fd)) {
+    remove_fuzzing_fd(fd);
+  }
 
   *ret_label = 0;
   return ret;
@@ -205,9 +205,9 @@ __dfsw_fclose(FILE *fd, dfsan_label fd_label, dfsan_label *ret_label) {
 #ifdef DEBUG_INFO
   fprintf(stderr, "### close, fd is %p, ret is %d \n", fd, ret);
 #endif
-//  if (ret == 0 && is_fuzzing_ffd(fd)) {
-//    remove_fuzzing_ffd(fd);
-//  }
+  if (ret == 0 && is_fuzzing_ffd(fd)) {
+    remove_fuzzing_ffd(fd);
+  }
   *ret_label = 0;
   return ret;
 }
@@ -223,8 +223,7 @@ __dfsw_mmap(void *start, size_t length, int prot, int flags, int fd,
           offset, length);
 #endif
   void *ret = mmap(start, length, prot, flags, fd, offset);
-//  if (ret > 0 && is_fuzzing_fd(fd)) {
-  if(ret>0) {
+  if (ret > 0 && is_fuzzing_fd(fd)) {
     assign_taint_labels(ret, offset, length);
   }
   *ret_label = 0;
@@ -258,8 +257,7 @@ __dfsw_fread(void *buf, size_t size, size_t count, FILE *fd,
   fprintf(stderr, "### fread %p,range is %ld, %ld  --  (size %d, count %d)\n",
           fd, offset, ret, size, count);
 #endif
- // if (is_fuzzing_ffd(fd)) {
- if(true) {
+  if (is_fuzzing_ffd(fd)) {
     if (ret > 0)
       assign_taint_labels_exf(buf, offset, ret, count, size);
     *ret_label = __angora_get_sp_label(offset, size);
@@ -280,8 +278,7 @@ __dfsw_fread_unlocked(void *buf, size_t size, size_t count, FILE *fd,
   fprintf(stderr, "### fread_unlocked %p,range is %ld, %ld/%ld\n", fd, offset,
           ret, count);
 #endif
-//  if (is_fuzzing_ffd(fd)) {
-  if(true) {
+  if (is_fuzzing_ffd(fd)) {
     if (ret > 0)
       assign_taint_labels_exf(buf, offset, ret, count, size);
     *ret_label = __angora_get_sp_label(offset, size);
@@ -302,8 +299,7 @@ __dfsw_read(int fd, void *buf, size_t count, dfsan_label fd_label,
   fprintf(stderr, "### read %d, range is %ld, %ld/%ld \n", fd, offset, ret,
           count);
 #endif
-//  if (is_fuzzing_fd(fd)) {
-  if(true) {
+  if (is_fuzzing_fd(fd)) {
     if (ret > 0)
       assign_taint_labels_exf(buf, offset, ret, count, 1);
     *ret_label = __angora_get_sp_label(offset, 1);
@@ -323,8 +319,7 @@ __dfsw_pread(int fd, void *buf, size_t count, off_t offset,
   fprintf(stderr, "### pread %d, range is %ld, %ld/%ld \n", fd, offset, ret,
           count);
 #endif
-//  if (is_fuzzing_fd(fd)) {
-  if(true) {
+  if (is_fuzzing_fd(fd)) {
     if (ret > 0)
       assign_taint_labels_exf(buf, offset, ret, count, 1);
     *ret_label = __angora_get_sp_label(offset, 1);
@@ -343,8 +338,7 @@ __dfsw_fgetc(FILE *fd, dfsan_label fd_label, dfsan_label *ret_label) {
 #ifdef DEBUG_INFO
   fprintf(stderr, "### fgetc %p, range is %ld, 1 \n", fd, offset);
 #endif
-//  if (c != EOF && is_fuzzing_ffd(fd)) {
-  if(c!=EOF) {
+  if (c != EOF && is_fuzzing_ffd(fd)) {
     dfsan_label l = dfsan_create_label(offset);
     *ret_label = l;
   }
@@ -359,8 +353,7 @@ __dfsw_fgetc_unlocked(FILE *fd, dfsan_label fd_label, dfsan_label *ret_label) {
 #ifdef DEBUG_INFO
   fprintf(stderr, "### fgetc_unlocked %p, range is %ld, 1 \n", fd, offset);
 #endif
- // if (c != EOF && is_fuzzing_ffd(fd)) {
-   if(c!=EOF) {
+  if (c != EOF && is_fuzzing_ffd(fd)) {
     dfsan_label l = dfsan_create_label(offset);
     *ret_label = l;
   }
@@ -376,8 +369,7 @@ __dfsw__IO_getc(FILE *fd, dfsan_label fd_label, dfsan_label *ret_label) {
   fprintf(stderr, "### _IO_getc %p, range is %ld, 1 , c is %d\n", fd, offset,
           c);
 #endif
-//  if (is_fuzzing_ffd(fd) && c != EOF) {
-  if(c!=EOF) {
+  if (is_fuzzing_ffd(fd) && c != EOF) {
     dfsan_label l = dfsan_create_label(offset);
     *ret_label = l;
   }
@@ -410,8 +402,7 @@ __dfsw_fgets(char *str, int count, FILE *fd, dfsan_label str_label,
 #ifdef DEBUG_INFO
   fprintf(stderr, "fgets %p, range is %ld, %ld \n", fd, offset, strlen(ret));
 #endif
-//  if (ret && is_fuzzing_ffd(fd)) {
-  if(ret) {
+  if (ret && is_fuzzing_ffd(fd)) {
     int len = strlen(ret); // + 1?
     assign_taint_labels_exf(str, offset, len, count, 1);
     *ret_label = str_label;
@@ -492,8 +483,7 @@ __dfsw_getline(char **lineptr, size_t *n, FILE *fd, dfsan_label buf_label,
 #ifdef DEBUG_INFO
   fprintf(stderr, "### getline %p,range is %ld, %ld\n", fd, offset, ret);
 #endif
-//  if (is_fuzzing_ffd(fd)) {
-  if(true){
+ if (is_fuzzing_ffd(fd)) {
     if (ret > 0)
       assign_taint_labels(*lineptr, offset, ret);
     *ret_label = __angora_get_sp_label(offset, 1);
@@ -514,8 +504,7 @@ __dfsw_getdelim(char **lineptr, size_t *n, int delim, FILE *fd,
 #ifdef DEBUG_INFO
   fprintf(stderr, "### getdelim %p,range is %ld, %ld\n", fd, offset, ret);
 #endif
-//  if (ret > 0 && is_fuzzing_ffd(fd)) {
-  if(ret>0){
+  if (ret > 0 && is_fuzzing_ffd(fd)) {
     assign_taint_labels(*lineptr, offset, ret);
   }
   *ret_label = 0;
@@ -532,8 +521,7 @@ __dfsw___getdelim(char **lineptr, size_t *n, int delim, FILE *fd,
 #ifdef DEBUG_INFO
   fprintf(stderr, "### __getdelim %p,range is %ld, %ld\n", fd, offset, ret);
 #endif
-  //if (ret > 0 && is_fuzzing_ffd(fd)) {
-  if(ret>0){
+  if (ret > 0 && is_fuzzing_ffd(fd)) {
     assign_taint_labels(*lineptr, offset, ret);
   }
   *ret_label = 0;
