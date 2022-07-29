@@ -121,7 +121,7 @@ static void add_runtime() {
     cc_params[cc_par_cnt++] =
         alloc_printf("-Wl,--dynamic-list=%s/lib/libdfsan_rt-x86_64.a.syms", obj_path);
 
-    cc_params[cc_par_cnt++] = alloc_printf("%s/lib/libruntime.a", obj_path);
+    cc_params[cc_par_cnt++] = alloc_printf("%s/lib/libruntime.so", obj_path);
     cc_params[cc_par_cnt++] = alloc_printf("%s/lib/libDFSanIO.a", obj_path);
     if (need_lz != 0)
       cc_params[cc_par_cnt++] = alloc_printf("%s/lib/libZlibRt.a", obj_path);

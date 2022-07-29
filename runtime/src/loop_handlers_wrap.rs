@@ -2,17 +2,17 @@ use super::*;
 use crate::{loop_handlers::*, tag_set_wrap::*};
 use angora_common::{cond_stmt_base::*, defs};
 use lazy_static::lazy_static;
-use std::{
-    slice, 
-    sync::Mutex, 
-    // ffi::CStr,
-    env,
-    path::PathBuf,
-    ffi::OsStr,
-    ffi::CStr,
-};
 use libc::c_char;
 use std::convert::TryInto;
+use std::{
+    // ffi::CStr,
+    env,
+    ffi::CStr,
+    ffi::OsStr,
+    path::PathBuf,
+    slice,
+    sync::Mutex,
+};
 
 // Lazy static doesn't have reference count and won't call drop after the program finish.
 // So, we should call drop manually.. see ***_fini.
@@ -25,16 +25,13 @@ lazy_static! {
 }
 
 #[no_mangle]
-pub extern "C" fn __chunk_get_load_label(
-    _a: *const i8,
-    _b: usize,
-) {
+pub extern "C" fn __chunk_get_load_label(_a: *const i8, _b: usize) {
     panic!("Forbid calling __chunk_get_load_label directly");
 }
 
 #[no_mangle]
 pub extern "C" fn __dfsw___chunk_get_load_label(
-    addr: *const i8, 
+    addr: *const i8,
     size: usize,
     _l0: DfsanLabel,
     _l1: DfsanLabel,
@@ -48,6 +45,9 @@ pub extern "C" fn __dfsw___chunk_get_load_label(
         };
         let lb = unsafe { dfsan_read_label(addr, arglen) };
         if lb <= 0 {
+            if cfg!(debug_assertions) {
+                eprintln!("[DEBUG] Load operation has no label");
+            }
             return 0;
         }
         infer_shape(lb, arglen as u32);
@@ -58,11 +58,7 @@ pub extern "C" fn __dfsw___chunk_get_load_label(
 }
 
 #[no_mangle]
-pub extern "C" fn __chunk_push_new_obj(
-    _a: u8,
-    _b: u32,
-    _c: u32,
-) {
+pub extern "C" fn __chunk_push_new_obj(_a: u8, _b: u32, _c: u32) {
     panic!("Forbid calling __chunk_push_new_obj directly");
 }
 
@@ -82,44 +78,33 @@ pub extern "C" fn __dfsw___chunk_push_new_obj(
     let mut osl = OS.lock().unwrap();
     if let Some(ref mut os) = *osl {
         os.new_obj(is_loop, loop_hash);
-    } 
+    }
 }
 
 #[no_mangle]
-pub extern "C" fn __chunk_dump_each_iter(
-    _a: u32,
-) {
+pub extern "C" fn __chunk_dump_each_iter(_a: u32) {
     panic!("Forbid calling __chunk_dump_each_iter directly");
 }
 
 #[no_mangle]
-pub extern "C" fn __dfsw___chunk_dump_each_iter(
-    loop_cnt: u32,
-    _l0: DfsanLabel,
-) {
+pub extern "C" fn __dfsw___chunk_dump_each_iter(loop_cnt: u32, _l0: DfsanLabel) {
     if loop_cnt == 0 {
         return;
-    }
-    else {
+    } else {
         let mut osl = OS.lock().unwrap();
         if let Some(ref mut os) = *osl {
             os.dump_cur_iter(loop_cnt);
-        } 
-    } 
+        }
+    }
 }
 
 #[no_mangle]
-pub extern "C" fn __chunk_pop_obj(
-    _a: u32,
-)  -> bool {
+pub extern "C" fn __chunk_pop_obj(_a: u32) -> bool {
     panic!("Forbid calling __chunk_pop_obj directly");
 }
 
 #[no_mangle]
-pub extern "C" fn __dfsw___chunk_pop_obj(
-    loop_hash: u32,
-    _l0: DfsanLabel,
-) -> bool {
+pub extern "C" fn __dfsw___chunk_pop_obj(loop_hash: u32, _l0: DfsanLabel) -> bool {
     let mut osl = OS.lock().unwrap();
     if let Some(ref mut os) = *osl {
         os.pop_obj(loop_hash);
@@ -138,13 +123,9 @@ pub extern "C" fn __chunk_object_stack_fini() {
 }
 
 #[no_mangle]
-pub extern "C" fn __chunk_set_input_file_name(
-    fsize: u32,
-){
+pub extern "C" fn __chunk_set_input_file_name(fsize: u32) {
     let input_file = match env::var("CHUNK_CURRENT_INPUT_FILE") {
-        Ok(path) => {
-            PathBuf::from(path)
-        },
+        Ok(path) => PathBuf::from(path),
         Err(_) => panic!("set input_name error"),
     };
     let file_name = match input_file.file_name() {
@@ -156,7 +137,7 @@ pub extern "C" fn __chunk_set_input_file_name(
         // set json file path
         let mut json_file = input_file.clone();
         let json_name = &format!("{}{}", file_name, ".json");
-        let json_name_os : &OsStr = OsStr::new(json_name);
+        let json_name_os: &OsStr = OsStr::new(json_name);
         json_file.set_file_name(json_name_os);
         os.set_input_file_name(json_file);
         os.set_input_file_size(fsize);
@@ -167,12 +148,12 @@ pub extern "C" fn __chunk_set_input_file_name(
         let log_name_os = OsStr::new(log_name);
         log_file.set_file_name(log_name_os);
         os.set_log_file_name(log_file);
-    } 
+    }
     let mut lcl = LC.lock().expect("Could not lock LC.");
     if let Some(ref mut lc) = *lcl {
         let mut track_file = input_file.clone();
         let track_name = &format!("{}{}", file_name, ".track");
-        let track_name_os : &OsStr = OsStr::new(track_name);
+        let track_name_os: &OsStr = OsStr::new(track_name);
         track_file.set_file_name(track_name_os);
         lc.set_input_file_name(track_file);
     }
@@ -220,7 +201,6 @@ pub extern "C" fn __dfsw___chunk_trace_cmp_tt(
     let mut size2 = 0;
 
     if in_loop_header == 1 {
-
         // 传入loop_handler,计数，收集在loop_header中的label的重复使用次数，在pop时过滤只使用一次的
         let mut osl = OS.lock().unwrap();
         if let Some(ref mut os) = *osl {
@@ -245,31 +225,29 @@ pub extern "C" fn __dfsw___chunk_trace_cmp_tt(
     if op == 32 || op == 33 {
         if lb1 != 0 && lb2 == 0 && is_cnst2 == 1 {
             //log enum
-            
+
             if arg2 == 0 {
                 return;
             }
-            
+
             let vec8 = arg2.to_le_bytes().to_vec();
-            let slice_vec8 = &vec8[..size2 as usize]; 
+            let slice_vec8 = &vec8[..size2 as usize];
             let vec8 = slice_vec8.to_vec();
-            
+
             log_enum(size2, lb1 as u64, vec8);
             return;
-        }
-        else if lb1 == 0 && lb2 != 0 && is_cnst1 == 1 {
+        } else if lb1 == 0 && lb2 != 0 && is_cnst1 == 1 {
             if arg1 == 0 {
                 return;
             }
-            
+
             let vec8 = arg1.to_le_bytes().to_vec();
             let slice_vec8 = &vec8[..size1 as usize];
             let vec8 = slice_vec8.to_vec();
-            
+
             log_enum(size1, lb2 as u64, vec8);
             return;
-        }
-        else if lb1 != 0 && lb2 != 0 {
+        } else if lb1 != 0 && lb2 != 0 {
             //maybe checksum
             //一个标签对应的数据长度等于size,另一个大于size
             //continous data
@@ -281,14 +259,11 @@ pub extern "C" fn __dfsw___chunk_trace_cmp_tt(
                         log_cond(0, size2, lb1 as u64, lb2 as u64, ChunkField::Checksum);
                         return;
                     }
-                    
-                }
-                else if size1 > size && size2 == size {
+                } else if size1 > size && size2 == size {
                     if list1.len() != 1 && list2.len() == 1 {
                         log_cond(0, size1, lb2 as u64, lb1 as u64, ChunkField::Checksum);
                         return;
                     }
-                    
                 }
             }
         }
@@ -299,13 +274,7 @@ pub extern "C" fn __dfsw___chunk_trace_cmp_tt(
 }
 
 #[no_mangle]
-pub extern "C" fn __chunk_trace_switch_tt(
-    _a: u32,
-    _b: u64,
-    _c: u32,
-    _d: *mut u64,
-    _e: u8
-) {
+pub extern "C" fn __chunk_trace_switch_tt(_a: u32, _b: u64, _c: u32, _d: *mut u64, _e: u8) {
     panic!("Forbid calling __chunk_trace_switch_tt directly");
 }
 
@@ -344,13 +313,7 @@ pub extern "C" fn __dfsw___chunk_trace_switch_tt(
 }
 
 #[no_mangle]
-pub extern "C" fn __chunk_trace_cmpfn_tt(
-    _a: *mut i8,
-    _b: *mut i8,
-    _c: u32,
-    _d: u8,
-    _e: u8,
-) {
+pub extern "C" fn __chunk_trace_cmpfn_tt(_a: *mut i8, _b: *mut i8, _c: u32, _d: u8, _e: u8) {
     panic!("Forbid calling __chunk_trace_cmpfn_tt directly");
 }
 
@@ -379,11 +342,17 @@ pub extern "C" fn __dfsw___chunk_trace_cmpfn_tt(
     if lb1 == 0 && lb2 == 0 {
         return;
     }
-    
+
     let arg1 = unsafe { slice::from_raw_parts(parg1 as *mut u8, arglen1) }.to_vec();
     let arg2 = unsafe { slice::from_raw_parts(parg2 as *mut u8, arglen2) }.to_vec();
-    if lb1 > 0  && lb2 > 0 {
-        log_cond(defs::COND_FN_OP, arglen1 as u32, lb1 as u64, lb2 as u64, ChunkField::Constraint); // op need check
+    if lb1 > 0 && lb2 > 0 {
+        log_cond(
+            defs::COND_FN_OP,
+            arglen1 as u32,
+            lb1 as u64,
+            lb2 as u64,
+            ChunkField::Constraint,
+        ); // op need check
         let mut osl = OS.lock().unwrap();
         if let Some(ref mut os) = *osl {
             infer_shape(lb1, arglen1 as u32);
@@ -391,15 +360,14 @@ pub extern "C" fn __dfsw___chunk_trace_cmpfn_tt(
             os.get_load_label(lb1);
             os.get_load_label(lb2);
         }
-    }
-    else if lb1 > 0 {
+    } else if lb1 > 0 {
         log_enum(arglen2 as u32, lb1 as u64, arg2);
         let mut osl = OS.lock().unwrap();
         if let Some(ref mut os) = *osl {
             infer_shape(lb1, arglen1 as u32);
             os.get_load_label(lb1);
         }
-    }else if lb2 > 0 {
+    } else if lb2 > 0 {
         log_enum(arglen1 as u32, lb2 as u64, arg1);
         let mut osl = OS.lock().unwrap();
         if let Some(ref mut os) = *osl {
@@ -410,11 +378,7 @@ pub extern "C" fn __dfsw___chunk_trace_cmpfn_tt(
 }
 
 #[no_mangle]
-pub extern "C" fn __chunk_trace_offsfn_tt(
-    _a: u32,
-    _b: u32,
-    _c: u8,
-) {
+pub extern "C" fn __chunk_trace_offsfn_tt(_a: u32, _b: u32, _c: u8) {
     panic!("Forbid calling __chunk_trace_offsfn_tt directly");
 }
 
@@ -436,12 +400,7 @@ pub extern "C" fn __dfsw___chunk_trace_offsfn_tt(
 }
 
 #[no_mangle]
-pub extern "C" fn __chunk_trace_lenfn_tt(
-    _a: *mut i8,
-    _b: u64,
-    _c: u32,
-    _d: u64
-) {
+pub extern "C" fn __chunk_trace_lenfn_tt(_a: *mut i8, _b: u64, _c: u32, _d: u64) {
     panic!("Forbid calling __chunk_trace_lenfn_tt directly");
 }
 
@@ -481,14 +440,10 @@ pub extern "C" fn __dfsw___chunk_trace_lenfn_tt(
             os.get_load_label(l2);
         }
     }
-
 }
 
 #[no_mangle]
-pub extern "C" fn __chunk_trace_branch_tt(
-    _a: u32,
-    _b: u8,
-) {
+pub extern "C" fn __chunk_trace_branch_tt(_a: u32, _b: u8) {
     panic!("Forbid calling __chunk_trace_branch_tt directly");
 }
 
@@ -497,17 +452,17 @@ pub extern "C" fn __dfsw___chunk_trace_branch_tt(
     hash: u32,
     itype: u8,
     _l1: DfsanLabel,
-    _l2: DfsanLabel,    
+    _l2: DfsanLabel,
 ) {
     let mut clsl = CLS.lock().unwrap();
     if let Some(ref mut cls) = *clsl {
         match itype {
             0 => {
                 cls.new_label(hash);
-            },
+            }
             1 => {
                 cls.pop_label(hash);
-            },
+            }
             _ => {
                 panic!("trace branch error!");
             }
@@ -516,13 +471,7 @@ pub extern "C" fn __dfsw___chunk_trace_branch_tt(
 }
 
 #[no_mangle]
-pub extern "C" fn __debug_inst_loc_fn(
-    _a: *const i8,
-    _b: u32,
-    _c: u32,
-    _d: u32,
-    _e: u32,
-) {
+pub extern "C" fn __debug_inst_loc_fn(_a: *const i8, _b: u32, _c: u32, _d: u32, _e: u32) {
     panic!("Forbid calling __debug_inst_loc_fn directly");
 }
 
@@ -539,7 +488,8 @@ pub extern "C" fn __dfsw___debug_inst_loc_fn(
     _l4: DfsanLabel,
     _l5: DfsanLabel,
 ) {
-    if !cfg!(debuf_assertions) {
+
+    if !cfg!(debug_assertions) {
         return;
     }
     // convert C string tp Rust string
@@ -552,35 +502,38 @@ pub extern "C" fn __dfsw___debug_inst_loc_fn(
     match itype {
         0 => {
             eprint!("[func call] ");
-        },
+        }
         1 => {
             eprint!("[cmp func] ");
-        },
+        }
         2 => {
             eprint!("[offset func] ");
-        },
+        }
         3 => {
             eprint!("[fread] ");
-        },
+        }
         4 => {
             eprint!("[memcpy] ");
-        },
+        }
         5 => {
             eprint!("[read] ");
         }
         6 => {
             eprint!("[switch] ");
-        },
+        }
         7 => {
             eprint!("\n[cmp inst] ");
-        },
+        }
         8 => {
             eprint!("[load] ");
-        },
+        }
         _ => {}
     }
 
-    eprintln!("trace : hash {:016X}, {}, {}, {}", hash, fname_slice, line, col);
+    eprintln!(
+        "trace : hash {:016X}, {}, {}, {}",
+        hash, fname_slice, line, col
+    );
 }
 
 /*
@@ -595,7 +548,7 @@ pub extern "C" fn __chunk_trace_gep_tt(
 
 #[no_mangle]
 pub extern "C" fn __dfsw___chunk_trace_gep_tt(
-    addr: *const i8, 
+    addr: *const i8,
     size: usize,
     load_lb: u32,
     _l0: DfsanLabel,
@@ -621,7 +574,7 @@ pub extern "C" fn __dfsw___chunk_trace_gep_tt(
         println!("offset: offset-lb:{}, paylaod-lb:{}", lb, load_lb);
         log_cond(1, size as u32, lb as u64, load_lb as u64, ChunkField::Offset)
     }
-    
+
 }
 */
 
@@ -641,13 +594,7 @@ fn infer_shape(lb: u32, size: u32) {
     }
 }
 
-fn log_cond(
-    op: u32,
-    size: u32,
-    lb1: u64,
-    lb2: u64,
-    field : ChunkField,
-) {
+fn log_cond(op: u32, size: u32, lb1: u64, lb2: u64, field: ChunkField) {
     let cond = CondStmtBase {
         op,
         size,
@@ -661,11 +608,7 @@ fn log_cond(
     }
 }
 
-fn log_enum(
-    size: u32,
-    lb: u64,
-    enums: Vec<u8>
-) {
+fn log_enum(size: u32, lb: u64, enums: Vec<u8>) {
     if enums.len() != size as usize || size == 0 {
         return;
     }
@@ -674,4 +617,3 @@ fn log_enum(
         lc.save_enums(lb, enums);
     }
 }
-

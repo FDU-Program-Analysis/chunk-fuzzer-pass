@@ -200,9 +200,10 @@ impl Logger {
                 s.push_str(&format!("{}}}\n", blank2));
                 s.push_str(&format!("{}}},\n", blank));
     
-            } else {
-                panic!("can not find lb {:016X} offset!", key);
             }
+            // else {
+            //     panic!("can not find lb {:016X} offset!", key);
+            // }
         }
 
         for i in &self.data.cond_list {

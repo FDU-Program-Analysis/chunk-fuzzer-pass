@@ -18,14 +18,14 @@ set -euxo pipefail
 CUR_DIR=`pwd`
 CLANG_SRC=${CUR_DIR}/llvm_src
 
-if [ ! -d $CLANG_SRC ]; then
-wget https://github.com/llvm/llvm-project/releases/download/llvmorg-${LLVM_VERSION}/llvm-${LLVM_VERSION}.src.tar.xz
-wget https://github.com/llvm/llvm-project/releases/download/llvmorg-${LLVM_VERSION}/cfe-${LLVM_VERSION}.src.tar.xz
-wget https://github.com/llvm/llvm-project/releases/download/llvmorg-${LLVM_VERSION}/compiler-rt-${LLVM_VERSION}.src.tar.xz
-wget https://github.com/llvm/llvm-project/releases/download/llvmorg-${LLVM_VERSION}/libcxx-${LLVM_VERSION}.src.tar.xz
-wget https://github.com/llvm/llvm-project/releases/download/llvmorg-${LLVM_VERSION}/libcxxabi-${LLVM_VERSION}.src.tar.xz
-wget https://github.com/llvm/llvm-project/releases/download/llvmorg-${LLVM_VERSION}/libunwind-${LLVM_VERSION}.src.tar.xz
-wget https://github.com/llvm/llvm-project/releases/download/llvmorg-${LLVM_VERSION}/clang-tools-extra-${LLVM_VERSION}.src.tar.xz
+# if [ ! -d $CLANG_SRC ]; then
+# wget https://github.com/llvm/llvm-project/releases/download/llvmorg-${LLVM_VERSION}/llvm-${LLVM_VERSION}.src.tar.xz
+# # wget https://github.com/llvm/llvm-project/releases/download/llvmorg-${LLVM_VERSION}/cfe-${LLVM_VERSION}.src.tar.xz
+# wget https://github.com/llvm/llvm-project/releases/download/llvmorg-${LLVM_VERSION}/compiler-rt-${LLVM_VERSION}.src.tar.xz
+# wget https://github.com/llvm/llvm-project/releases/download/llvmorg-${LLVM_VERSION}/libcxx-${LLVM_VERSION}.src.tar.xz
+# wget https://github.com/llvm/llvm-project/releases/download/llvmorg-${LLVM_VERSION}/libcxxabi-${LLVM_VERSION}.src.tar.xz
+# wget https://github.com/llvm/llvm-project/releases/download/llvmorg-${LLVM_VERSION}/libunwind-${LLVM_VERSION}.src.tar.xz
+# wget https://github.com/llvm/llvm-project/releases/download/llvmorg-${LLVM_VERSION}/clang-tools-extra-${LLVM_VERSION}.src.tar.xz
 
 
 rm -rf $CLANG_SRC
@@ -34,8 +34,8 @@ tar -Jxf ${CUR_DIR}/llvm-${LLVM_VERSION}.src.tar.xz
 mv llvm-${LLVM_VERSION}.src $CLANG_SRC
 
 cd ${CLANG_SRC}/tools
-tar -Jxf ${CUR_DIR}/cfe-${LLVM_VERSION}.src.tar.xz 
-mv cfe-${LLVM_VERSION}.src clang
+# tar -Jxf ${CUR_DIR}/cfe-${LLVM_VERSION}.src.tar.xz 
+# mv cfe-${LLVM_VERSION}.src clang
 cd ${CLANG_SRC}/tools/clang/tools
 tar -Jxf ${CUR_DIR}/clang-tools-extra-${LLVM_VERSION}.src.tar.xz 
 mv clang-tools-extra-${LLVM_VERSION}.src extra

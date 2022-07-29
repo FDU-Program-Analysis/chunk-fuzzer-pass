@@ -12,13 +12,23 @@ fi
 
 PREFIX=${PREFIX:-${ROOT_DIR}/install/}
 
-cargo build
-cargo build --release
+[ -z ${DEBUG+x} ]&&DEBUG=0
+
+if [ $DEBUG -eq 0 ]; then
+    cargo build --release
+else
+    cargo build
+fi
 
 rm -rf ${PREFIX}
 mkdir -p ${PREFIX}
 mkdir -p ${PREFIX}/lib
-cp target/release/*.a ${PREFIX}/lib
+
+if [ $DEBUG -eq 0 ]; then
+    cp target/release/*.so ${PREFIX}/lib
+else
+    cp target/debug/*.so ${PREFIX}/lib
+fi
 
 rm -rf build
 mkdir -p build
