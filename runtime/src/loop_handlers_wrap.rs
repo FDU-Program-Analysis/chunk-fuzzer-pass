@@ -199,7 +199,9 @@ pub extern "C" fn __dfsw___chunk_trace_cmp_tt(
     }
     let mut size1 = 0;
     let mut size2 = 0;
-
+    if cfg!(debug_assertions) {
+        eprintln!("[DEBUG] __dfsw___chunk_trace_cmp_tt");
+    }
     if in_loop_header == 1 {
         // 传入loop_handler,计数，收集在loop_header中的label的重复使用次数，在pop时过滤只使用一次的
         let mut osl = OS.lock().unwrap();
@@ -220,8 +222,10 @@ pub extern "C" fn __dfsw___chunk_trace_cmp_tt(
         size1 = os.get_load_label(lb1);
         size2 = os.get_load_label(lb2);
     }
-
     let op = infer_eq_sign(op, lb1, lb2);
+    if cfg!(debug_assertions) {
+        eprintln!("[DEBUG] op is {}, lb1 is {}, lb2 is {}, is_cnst2 is {}, arg2 is {}", op, lb1, lb2, is_cnst2, arg2);
+    }
     if op == 32 || op == 33 {
         if lb1 != 0 && lb2 == 0 && is_cnst2 == 1 {
             //log enum
@@ -231,16 +235,19 @@ pub extern "C" fn __dfsw___chunk_trace_cmp_tt(
             }
 
             let vec8 = arg2.to_le_bytes().to_vec();
+            size2 = size1;
             let slice_vec8 = &vec8[..size2 as usize];
             let vec8 = slice_vec8.to_vec();
-
+            if cfg!(debug_assertions) {
+                eprintln!("size2 is {}, size1 is {}, lb1 is {}, vec.len is {}", size2, size1, lb1, vec8.len());
+            }
             log_enum(size2, lb1 as u64, vec8);
             return;
         } else if lb1 == 0 && lb2 != 0 && is_cnst1 == 1 {
             if arg1 == 0 {
                 return;
             }
-
+            size1 = size2;
             let vec8 = arg1.to_le_bytes().to_vec();
             let slice_vec8 = &vec8[..size1 as usize];
             let vec8 = slice_vec8.to_vec();
