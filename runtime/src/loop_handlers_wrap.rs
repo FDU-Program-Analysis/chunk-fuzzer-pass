@@ -222,7 +222,7 @@ pub extern "C" fn __dfsw___chunk_trace_cmp_tt(
         size1 = os.get_load_label(lb1);
         size2 = os.get_load_label(lb2);
     }
-    let op = infer_eq_sign(op, lb1, lb2);
+    // let op = infer_eq_sign(op, lb1, lb2);
     if cfg!(debug_assertions) {
         eprintln!("[DEBUG] op is {}, lb1 is {}, lb2 is {}, is_cnst2 is {}, arg2 is {}", op, lb1, lb2, is_cnst2, arg2);
     }
