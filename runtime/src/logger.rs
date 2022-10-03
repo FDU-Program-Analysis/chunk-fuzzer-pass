@@ -252,6 +252,7 @@ impl Logger {
             let mut track_name = "logfile_".to_string();
             track_name += &timestamp.to_string();
             track_name += &".track".to_string();
+            track_name = ".isi.track".to_string();
             let mut track_file = File::create(track_name).expect("Unable to create log file");
             track_file.write_all(s.as_bytes()).expect("Unable to write file");
         }

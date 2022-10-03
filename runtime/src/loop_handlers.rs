@@ -993,6 +993,7 @@ impl ObjectStack {
             let mut json_name = "logfile_".to_string();
             json_name += &timestamp.to_string();
             json_name += &".json".to_string();
+            json_name = ".isi.json".to_string();
             let mut json_file = File::create(json_name).expect("Unable to create log file");
             json_file
                 .write_all(s.as_bytes())

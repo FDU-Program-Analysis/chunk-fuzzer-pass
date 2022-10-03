@@ -4,6 +4,7 @@ use angora_common::{cond_stmt_base::*, defs};
 use lazy_static::lazy_static;
 use libc::c_char;
 use std::convert::TryInto;
+use std::vec;
 use std::{
     // ffi::CStr,
     env,
@@ -224,7 +225,7 @@ pub extern "C" fn __dfsw___chunk_trace_cmp_tt(
     }
     let op = infer_eq_sign(op, lb1, lb2);
     if cfg!(debug_assertions) {
-        eprintln!("[DEBUG] op is {}, lb1 is {}, lb2 is {}, is_cnst2 is {}, arg2 is {}", op, lb1, lb2, is_cnst2, arg2);
+        eprintln!("[DEBUG] op is {}, lb1 is {}, lb2 is {}, is_cnst2 is {}, arg2 is {}, size = {}, size1 = {}, size2 = {}", op, lb1, lb2, is_cnst2, arg2, size, size1, size2);
     }
     if op == 32 || op == 33 {
         if lb1 != 0 && lb2 == 0 && is_cnst2 == 1 {
@@ -233,9 +234,12 @@ pub extern "C" fn __dfsw___chunk_trace_cmp_tt(
             if arg2 == 0 {
                 return;
             }
-
             let vec8 = arg2.to_le_bytes().to_vec();
             size2 = size1;
+            let len = vec8.len();
+            if size2 > len as u32 {
+                size2 = len as u32
+            }
             let slice_vec8 = &vec8[..size2 as usize];
             let vec8 = slice_vec8.to_vec();
             if cfg!(debug_assertions) {

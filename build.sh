@@ -5,7 +5,7 @@ ROOT_DIR=$(dirname $BIN_PATH)
 
 set -euxo pipefail
 
-if ! [ -x "$(command -v llvm-config)"  ]; then
+if ! [ -x "$(command -v llvm-config-10)"  ]; then
     echo "Please install clang-10"
     exit 1
 fi
@@ -25,9 +25,11 @@ mkdir -p ${PREFIX}
 mkdir -p ${PREFIX}/lib
 
 if [ $DEBUG -eq 0 ]; then
-    cp target/release/*.so ${PREFIX}/lib
+#    cp target/release/*.so ${PREFIX}/lib
+    cp target/release/*.a ${PREFIX}/lib
 else
-    cp target/debug/*.so ${PREFIX}/lib
+#    cp target/debug/*.so ${PREFIX}/lib
+    cp target/release/*.a ${PREFIX}/lib
 fi
 
 rm -rf build
