@@ -178,7 +178,7 @@ impl Logger {
         for (key, value) in &self.data.enums {
             if let Some(field) = self.data.tags.get(key) {
                 count += 1;
-                s.push_str(&format!("{}\"{}\": {{\n", blank, count));
+                s.push_str(&format!("{}\"{:016X}\": {{\n", blank, key));
                 s.push_str(&format!("{}\"{}\": {},\n", blank2, start, field.begin));
                 s.push_str(&format!("{}\"{}\": {},\n", blank2, end, field.end));
                 s.push_str(&format!("{}\"{}\": \"enum\",\n", blank2, ty));
@@ -211,12 +211,12 @@ impl Logger {
                 if let Some(field1) = self.data.tags.get(&i.lb1) {
                     if let Some(field2) = self.data.tags.get(&i.lb2) {
                         count += 1;
-                        s.push_str(&format!("{}\"{}\": {{\n", blank, count));
+                        s.push_str(&format!("{}\"{:016X}\": {{\n", blank, i.lb1));
                         s.push_str(&format!("{}\"{}\": {},\n", blank2, start, field1.begin));
                         s.push_str(&format!("{}\"{}\": {},\n", blank2, end, field1.end));
                         s.push_str(&format!("{}\"{}\": \"length\",\n", blank2, ty));  
                         
-                        s.push_str(&format!("{}\"target\": {{\n", blank2));
+                        s.push_str(&format!("{}\"{:016X}\": {{\n", blank2, i.lb2));
                         s.push_str(&format!("{}\"{}\": {},\n", blank3, start, field2.begin));
                         s.push_str(&format!("{}\"{}\": {}\n", blank3, end, field2.end));
                         s.push_str(&format!("{}}}\n", blank2));
@@ -225,6 +225,26 @@ impl Logger {
                     }
                 }
             }
+
+            if i.field == ChunkField::Offset {
+                if let Some(field1) = self.data.tags.get(&i.lb1) {
+                    if let Some(field2) = self.data.tags.get(&i.lb2) {
+                        count += 1;
+                        s.push_str(&format!("{}\"{:016X}\": {{\n", blank, i.lb1));
+                        s.push_str(&format!("{}\"{}\": {},\n", blank2, start, field1.begin));
+                        s.push_str(&format!("{}\"{}\": {},\n", blank2, end, field1.end));
+                        s.push_str(&format!("{}\"{}\": \"offset\",\n", blank2, ty));  
+                        
+                        s.push_str(&format!("{}\"{:016X}\": {{\n", blank2, i.lb2));
+                        s.push_str(&format!("{}\"{}\": {},\n", blank3, start, field2.begin));
+                        s.push_str(&format!("{}\"{}\": {}\n", blank3, end, field2.end));
+                        s.push_str(&format!("{}}}\n", blank2));
+                        s.push_str(&format!("{}}},\n", blank));
+    
+                    }
+                }
+            }
+
         }
         s.pop();
         s.pop();

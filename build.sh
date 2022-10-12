@@ -5,8 +5,11 @@ ROOT_DIR=$(dirname $BIN_PATH)
 
 set -euxo pipefail
 
-if ! [ -x "$(command -v llvm-config-10)"  ]; then
-    echo "Please install clang-10"
+if [ -x "$(command -v llvm-config-10)"  ]; then
+    echo "Find llvm-config-10"
+elif [ -x "$(command -v llvm-config)" ]; then
+    echo "Find llvm-config"
+else
     exit 1
 fi
 
