@@ -28,11 +28,11 @@ mkdir -p ${PREFIX}
 mkdir -p ${PREFIX}/lib
 
 if [ $DEBUG -eq 0 ]; then
-#    cp target/release/*.so ${PREFIX}/lib
-    cp target/release/*.a ${PREFIX}/lib
+    cp target/release/*.so ${PREFIX}/lib
+    # cp target/release/*.a ${PREFIX}/lib
 else
-#    cp target/debug/*.so ${PREFIX}/lib
-    cp target/release/*.a ${PREFIX}/lib
+    cp target/debug/*.so ${PREFIX}/lib
+    # cp target/debug/*.a ${PREFIX}/lib
 fi
 
 rm -rf build

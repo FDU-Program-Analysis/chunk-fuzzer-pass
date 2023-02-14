@@ -38,6 +38,7 @@ pub extern "C" fn __angora_io_remove_pfile(pfile: *mut libc::FILE) {
 pub extern "C" fn __angora_io_find_fd(fd: libc::c_int) -> u32 {
     let ffds = FFDS.lock().expect("Could not lock FFDS.");
     ffds.contains(&(fd as u32)) as u32
+    // 1 as u32
 }
 
 #[no_mangle]

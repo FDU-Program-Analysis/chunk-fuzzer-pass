@@ -207,6 +207,7 @@ pub extern "C" fn __dfsw___chunk_trace_cmp_tt(
         // 传入loop_handler,计数，收集在loop_header中的label的重复使用次数，在pop时过滤只使用一次的
         let mut osl = OS.lock().unwrap();
         if let Some(ref mut os) = *osl {
+            // The tainted value used in loop header may be the length.
             if lb1 != 0 {
                 os.maybe_length(lb1);
             }
@@ -435,6 +436,9 @@ pub extern "C" fn __dfsw___chunk_trace_lenfn_tt(
     let lb = unsafe { dfsan_read_label(dst, len) };
     // lb先dst后len
     if lb != 0 && l1 != 0 {
+        if cfg!(debug_assertions) {
+            eprintln!("[DEBUG] length: {}, lb: {}, l1: {}", len, lb, l1);
+        }
         log_cond(0, len as u32, l1 as u64, lb as u64, ChunkField::Length);
         let mut osl = OS.lock().unwrap();
         if let Some(ref mut os) = *osl {
@@ -444,6 +448,9 @@ pub extern "C" fn __dfsw___chunk_trace_lenfn_tt(
     }
 
     if len2 != 0 && lb != 0 && l2 != 0 {
+        if cfg!(debug_assertions) {
+            eprintln!("[DEBUG] length {}, lb: {}, l2: {}", len, lb, l2);
+        }
         log_cond(0, len as u32, l2 as u64, lb as u64, ChunkField::Length);
         let mut osl = OS.lock().unwrap();
         if let Some(ref mut os) = *osl {

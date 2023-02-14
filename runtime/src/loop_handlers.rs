@@ -603,7 +603,7 @@ impl ObjectStack {
         let saved = loop_handlers::ObjectStack::access_check(lb as u64, Offset::new(0, 0, 0));
         if saved != 0 {
             if cfg!(debug_assertions) {
-                eprintln!("[DEBUG]Meet saved load label");
+                eprintln!("[DEBUG] Meet saved load label");
             }
             return saved;
         }
@@ -734,14 +734,22 @@ impl ObjectStack {
                 loop_handlers::ObjectStack::construct_tree(&mut list);
                 if list.len() == 1 {
                     for (key, value) in &top_obj.length_candidates {
+                        
                         let tmp_field = Offset {
                             begin: 0,
                             end: 0,
                             size: 0,
                         };
                         let size = loop_handlers::ObjectStack::access_check(*key as u64, tmp_field);
+                        if cfg!(debug_assertions) {
+                            eprintln!("[DEBUG] length candidate: lb {}, {}", key, value);
+                            eprintln!("[DEBUG] list {:?}", list);
+                        }
 
                         if size != 0 && *value == top_obj.cur_iter_num {
+                            if cfg!(debug_assertions) {
+                                eprintln!("[DEBUG] length: lb {}, {:?}", key, list);
+                            }
                             let cond = CondStmtBase {
                                 op: 0,
                                 size,
